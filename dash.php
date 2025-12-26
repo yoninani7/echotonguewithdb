@@ -1,11 +1,63 @@
 <?php
-session_start();
+// Start session with security settings
+session_set_cookie_params([
+    'lifetime' => 3600,
+    'path' => '/',
+    'domain' => '',
+    'secure' => isset($_SERVER['HTTPS']),
+    'httponly' => true,
+    'samesite' => 'Strict'
+]);
 
-// Check if user is logged in (uncomment for production)
-// if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
+session_start();
+session_regenerate_id(true);
+
+// Security headers
+header('X-Frame-Options: DENY');
+header('X-Content-Type-Options: nosniff');
+header('X-XSS-Protection: 1; mode=block');
+header('Referrer-Policy: strict-origin-when-cross-origin');
+header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
+
+// Content Security Policy
+header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com/ajax/libs/; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com/ajax/libs/ https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:;");
+
+// Error reporting (production mode)
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+ini_set('error_log', __DIR__ . '/php_errors.log');
+error_reporting(E_ALL & ~E_DEPRECATED & ~E_STRICT);
+
+// Check if user is logged in
+// if (!isset($_SESSION['user_id']) || !isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
 //     header('Location: login.php');
 //     exit;
 // }
+
+// Initialize rate limiting
+if (!isset($_SESSION['last_request'])) {
+    $_SESSION['last_request'] = time();
+    $_SESSION['request_count'] = 0;
+}
+
+$current_time = time();
+if ($current_time - $_SESSION['last_request'] > 60) {
+    // Reset counter if more than a minute has passed
+    $_SESSION['request_count'] = 0;
+    $_SESSION['last_request'] = $current_time;
+}
+
+$_SESSION['request_count']++;
+if ($_SESSION['request_count'] > 30) {
+    // Rate limit exceeded
+    header('HTTP/1.1 429 Too Many Requests');
+    die('Rate limit exceeded. Please wait and try again.');
+}
+
+// Generate CSRF token
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
 
 // Database connection
 $host = 'localhost';
@@ -13,95 +65,179 @@ $username = 'root';
 $password = '';
 $database = 'echotongue';
 
-$conn = new mysqli($host, $username, $password, $database);
-if ($conn->connect_error) {
-    die("Connection failed: " . $conn->connect_error);
+try {
+    $conn = new mysqli($host, $username, $password, $database);
+    if ($conn->connect_error) {
+        throw new Exception("Database connection failed");
+    }
+    $conn->set_charset("utf8mb4");
+    $conn->query("SET SESSION sql_mode = 'STRICT_ALL_TABLES'");
+} catch (Exception $e) {
+    error_log("Database connection error: " . $e->getMessage());
+    die("A database error occurred. Please try again later.");
+}
+
+// Validation function
+function validateThoughtText($text) {
+    $text = trim($text);
+    if (empty($text)) {
+        return false;
+    }
+    
+    // Check length
+    if (strlen($text) > 1000) {
+        return false;
+    }
+    
+    // Check for excessive newlines (potential spam)
+    $newline_count = substr_count($text, "\n");
+    if ($newline_count > 50) {
+        return false;
+    }
+    
+    // Remove harmful content but preserve safe formatting
+    $text = strip_tags($text);
+    $text = htmlspecialchars($text, ENT_QUOTES | ENT_HTML5, 'UTF-8', false);
+    
+    return $text;
 }
 
 // Initialize variables
 $message = '';
 $message_type = '';
+$confirm_message = '';
+$id = 0;
+$confirm_id = 0;
 
 // Handle form submissions
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    // Add new thought
-    if (isset($_POST['add_thought'])) {
-        $thought_text = trim($_POST['thought_text'] ?? '');
-        
-        if (!empty($thought_text)) {
-            $stmt = $conn->prepare("INSERT INTO authors_thoughts (thought_date, thought_text) VALUES (NOW(), ?)");
-            $stmt->bind_param("s", $thought_text);
+    // Validate CSRF token
+    if (!isset($_POST['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])) {
+        $message = "Invalid security token. Please refresh the page and try again.";
+        $message_type = "error";
+    } else {
+        // Add new thought
+        if (isset($_POST['add_thought'])) {
+            $thought_text = validateThoughtText($_POST['thought_text'] ?? '');
             
-            if ($stmt->execute()) {
-                $message = "Thought added successfully!";
-                $message_type = "success";
-                header("Location: " . $_SERVER['PHP_SELF'] . "?success=1");
-                exit();
+            if ($thought_text !== false) {
+                $stmt = $conn->prepare("INSERT INTO authors_thoughts (thought_date, thought_text) VALUES (NOW(), ?)");
+                
+                if ($stmt) {
+                    $stmt->bind_param("s", $thought_text);
+                    
+                    if ($stmt->execute()) {
+                        // Regenerate CSRF token after successful operation
+                        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+                        $_SESSION['success_message'] = "Thought added successfully!";
+                        $stmt->close();
+                        header("Location: " . htmlspecialchars($_SERVER['PHP_SELF']));
+                        exit();
+                    } else {
+                        error_log("Error adding thought: " . $stmt->error);
+                        $message = "An error occurred while adding the thought. Please try again.";
+                        $message_type = "error";
+                    }
+                    $stmt->close();
+                } else {
+                    error_log("Database prepare error: " . $conn->error);
+                    $message = "An error occurred. Please try again.";
+                    $message_type = "error";
+                }
             } else {
-                $message = "Error adding thought: " . $stmt->error;
+                $message = "Invalid thought text. Please enter text between 1 and 1000 characters.";
                 $message_type = "error";
             }
-            $stmt->close();
-        } else {
-            $message = "Please enter a thought!";
-            $message_type = "error";
         }
-    }
-    
-    // Update thought
-    if (isset($_POST['update_thought'])) {
-        $id = intval($_POST['edit_id'] ?? 0);
-        $thought_text = trim($_POST['edit_text'] ?? '');
         
-        if ($id > 0 && !empty($thought_text)) {
-            $stmt = $conn->prepare("UPDATE authors_thoughts SET thought_text = ?, thought_date = NOW() WHERE id = ?");
-            $stmt->bind_param("si", $thought_text, $id);
+        // Update thought
+        if (isset($_POST['update_thought'])) {
+            $id = intval($_POST['edit_id'] ?? 0);
+            $thought_text = validateThoughtText($_POST['edit_text'] ?? '');
             
-            if ($stmt->execute()) {
-                $message = "Thought updated successfully!";
-                $message_type = "success";
-                header("Location: " . $_SERVER['PHP_SELF'] . "?success=1");
-                exit();
+            if ($id > 0 && $thought_text !== false) {
+                $stmt = $conn->prepare("UPDATE authors_thoughts SET thought_text = ?, thought_date = NOW() WHERE id = ?");
+                
+                if ($stmt) {
+                    $stmt->bind_param("si", $thought_text, $id);
+                    
+                    if ($stmt->execute()) {
+                        // Regenerate CSRF token after successful operation
+                        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+                        $_SESSION['success_message'] = "Thought updated successfully!";
+                        $stmt->close();
+                        header("Location: " . htmlspecialchars($_SERVER['PHP_SELF']));
+                        exit();
+                    } else {
+                        error_log("Error updating thought: " . $stmt->error);
+                        $message = "An error occurred while updating the thought. Please try again.";
+                        $message_type = "error";
+                    }
+                    $stmt->close();
+                } else {
+                    error_log("Database prepare error: " . $conn->error);
+                    $message = "An error occurred. Please try again.";
+                    $message_type = "error";
+                }
             } else {
-                $message = "Error updating thought: " . $stmt->error;
+                $message = "Invalid thought data!";
                 $message_type = "error";
             }
-            $stmt->close();
         }
     }
 }
 
-// Delete thought
+// Handle delete requests
 if (isset($_GET['delete'])) {
     $id = intval($_GET['delete']);
     
-    // Confirm deletion
-    if (isset($_GET['confirm']) && $_GET['confirm'] == 'yes') {
-        $stmt = $conn->prepare("DELETE FROM authors_thoughts WHERE id = ?");
-        $stmt->bind_param("i", $id);
-        
-        if ($stmt->execute()) {
-            $message = "Thought deleted successfully!";
-            $message_type = "success";
-            header("Location: " . $_SERVER['PHP_SELF'] . "?success=1");
-            exit();
-        } else {
-            $message = "Error deleting thought: " . $stmt->error;
-            $message_type = "error";
-        }
-        $stmt->close();
+    if ($id <= 0) {
+        $message = "Invalid thought ID.";
+        $message_type = "error";
     } else {
-        // Show confirmation dialog
-        $confirm_message = "Are you sure you want to delete this thought?";
+        $token = $_GET['csrf_token'] ?? '';
+        
+        if (!hash_equals($_SESSION['csrf_token'], $token)) {
+            $message = "Invalid security token for deletion.";
+            $message_type = "error";
+        } elseif (!isset($_GET['confirm'])) {
+            // Show confirmation dialog
+            $confirm_message = "Are you sure you want to delete this thought?";
+            $confirm_id = $id;
+        } elseif (isset($_GET['confirm']) && $_GET['confirm'] == 'yes') {
+            // Perform deletion
+            $stmt = $conn->prepare("DELETE FROM authors_thoughts WHERE id = ?");
+            
+            if ($stmt) {
+                $stmt->bind_param("i", $id);
+                
+                if ($stmt->execute()) {
+                    // Regenerate CSRF token after successful operation
+                    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+                    $_SESSION['success_message'] = "Thought deleted successfully!";
+                    $stmt->close();
+                    header("Location: " . htmlspecialchars($_SERVER['PHP_SELF']));
+                    exit();
+                } else {
+                    error_log("Error deleting thought: " . $stmt->error);
+                    $message = "An error occurred while deleting the thought. Please try again.";
+                    $message_type = "error";
+                }
+                $stmt->close();
+            } else {
+                error_log("Database prepare error: " . $conn->error);
+                $message = "An error occurred. Please try again.";
+                $message_type = "error";
+            }
+        }
     }
 }
 
-// Check for success message from redirect
-if (isset($_GET['success']) && $_GET['success'] == '1') {
-    $message = isset($_GET['action']) ? 
-        ucfirst($_GET['action']) . " completed successfully!" : 
-        "Operation completed successfully!";
+// Check for success message from session
+if (isset($_SESSION['success_message'])) {
+    $message = $_SESSION['success_message'];
     $message_type = "success";
+    unset($_SESSION['success_message']);
 }
 
 // Fetch all thoughts for display
@@ -112,7 +248,13 @@ if ($result) {
         $thoughts[] = $row;
     }
     $result->free();
+} else {
+    error_log("Error fetching thoughts: " . $conn->error);
+    $message = "An error occurred while loading thoughts.";
+    $message_type = "error";
 }
+
+// Close database connection (will be closed at end of file)
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -311,7 +453,9 @@ if ($result) {
             display: flex;
             align-items: center;
             gap: 10px;
-            animation: fadeIn 0.5s ease;
+            position: relative;
+            overflow: hidden;
+            animation: slideIn 0.5s ease;
         }
 
         .message.success {
@@ -326,18 +470,32 @@ if ($result) {
             color: #ff6b6b;
         }
 
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(-10px); }
-            to { opacity: 1; transform: translateY(0); }
+        .message-close {
+            background: none;
+            border: none;
+            color: inherit;
+            cursor: pointer;
+            margin-left: auto;
+            font-size: 1.2rem;
+            opacity: 0.7;
+            transition: var(--transition);
+            padding: 0;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .message-close:hover {
+            opacity: 1;
         }
 
         /* Form Card */
         .form-card {
             background: rgba(20, 20, 20, 0.8);
             border-radius: 15px;
-            padding-top: 30px;
-            padding-left: 30px;
-            padding-right: 30px; 
+            padding: 30px;
             margin-bottom: 20px;
             border: 1px solid rgba(255, 255, 255, 0.05);
             backdrop-filter: blur(10px);
@@ -384,7 +542,6 @@ if ($result) {
             min-height: 150px;
             resize: vertical;
             line-height: 1.6;
-            resize: none;
         }
 
         .form-input:focus,
@@ -526,8 +683,6 @@ if ($result) {
             color: rgba(255, 255, 255, 0.1);
         }
 
-       
-
         /* Responsive Design */
         @media (max-width: 1024px) {
             .dashboard-container {
@@ -647,6 +802,7 @@ if ($result) {
             font-size: 1.5rem;
             cursor: pointer;
             transition: var(--transition);
+            padding: 5px;
         }
 
         .modal-close:hover {
@@ -709,7 +865,8 @@ if ($result) {
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
-         /* Add some missing styles */
+        
+        /* Add some missing styles */
         .current-time {
             background: rgba(20, 20, 20, 0.8);
             padding: 10px 20px;
@@ -786,6 +943,52 @@ if ($result) {
         html {
             scroll-behavior: smooth;
         }
+        
+        /* Animation classes */
+        @keyframes slideIn {
+            from { 
+                opacity: 0; 
+                transform: translateY(-20px); 
+            }
+            to { 
+                opacity: 1; 
+                transform: translateY(0); 
+            }
+        }
+        
+        @keyframes fadeOut {
+            from { 
+                opacity: 1; 
+                transform: translateY(0); 
+            }
+            to { 
+                opacity: 0; 
+                transform: translateY(-10px); 
+                max-height: 0;
+                margin-bottom: 0;
+                padding-top: 0;
+                padding-bottom: 0;
+                overflow: hidden;
+            }
+        }
+        
+        /* Validation styles */
+        .validation-error {
+            color: #ff6b6b;
+            font-size: 0.8rem;
+            margin-top: 5px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .char-limit-warning {
+            color: #ffa726 !important;
+        }
+        
+        .char-limit-danger {
+            color: #ff6b6b !important;
+        }
     </style>
 </head>
 <body>
@@ -802,7 +1005,7 @@ if ($result) {
                 <div class="user-avatar">
                     <i class="fas fa-user"></i>
                 </div>
-                <h3 class="user-name">Author</h3>
+                <h3 class="user-name"><?php echo htmlspecialchars($_SESSION['username'] ?? 'Author', ENT_QUOTES, 'UTF-8'); ?></h3>
                 <p class="user-role">Administrator</p>
             </div>
             
@@ -832,7 +1035,7 @@ if ($result) {
         <main class="main-content">
             <div class="current-time" id="currentTime">
                 <i class="far fa-clock"></i> 
-                <span><?php echo date('F j, Y, H:i:s'); ?></span>
+                <span><?php echo htmlspecialchars(date('F j, Y, H:i:s'), ENT_QUOTES, 'UTF-8'); ?></span>
             </div>
             
             <div class="dashboard-header">  
@@ -842,12 +1045,14 @@ if ($result) {
                 </div>
             </div>
             
-            <!-- Message Display -->
             <?php if ($message): ?>
-                <div class="message <?php echo $message_type; ?>" id="messageBox">
-                    <i class="fas fa-<?php echo $message_type == 'success' ? 'check-circle' : 'exclamation-circle'; ?>"></i>
-                    <span><?php echo htmlspecialchars($message); ?></span>
-                </div>
+            <div class="message <?php echo htmlspecialchars($message_type, ENT_QUOTES, 'UTF-8'); ?>" id="messageBox">
+                <i class="fas fa-<?php echo $message_type === 'success' ? 'check-circle' : 'exclamation-circle'; ?>"></i>
+                <span><?php echo htmlspecialchars($message, ENT_QUOTES, 'UTF-8'); ?></span>
+                <button class="message-close" onclick="closeMessage(this)">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
             <?php endif; ?>
             
             <!-- Add New Thought Form -->
@@ -855,6 +1060,7 @@ if ($result) {
                 <h2><i class="fas fa-plus-circle"></i> Add New Thought</h2>
                 
                 <form method="POST" action="" id="thoughtForm" onsubmit="return validateForm()">
+                    <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8'); ?>">
                     <div class="form-group">
                         <label class="form-label" for="thought_text">Thought Text *</label>
                         <textarea 
@@ -862,7 +1068,15 @@ if ($result) {
                             name="thought_text" 
                             class="form-textarea"  
                             placeholder="Share your writing insights, inspirations, or reflections..."
-                            required ></textarea> 
+                            required
+                            maxlength="1000"></textarea> 
+                        <small style="color: #666; margin-top: 5px; display: block;">
+                            Maximum 1000 characters. Current: <span id="charCount">0</span>
+                        </small>
+                        <div id="thoughtError" class="validation-error" style="display: none;">
+                            <i class="fas fa-exclamation-circle"></i>
+                            <span></span>
+                        </div>
                     </div>
                     
                     <div class="form-group">
@@ -872,13 +1086,16 @@ if ($result) {
                         <button type="button" class="btn btn-secondary" onclick="previewThought()" style="margin-left: 10px;">
                             <i class="fas fa-eye"></i> Preview
                         </button>
+                        <button type="reset" class="btn btn-secondary" style="margin-left: 10px;" onclick="resetForm()">
+                            <i class="fas fa-redo"></i> Clear
+                        </button>
                     </div>
                 </form>
             </div>
             
-            <!-- Thoughts Preview -->
+            <!-- Preview Section -->
             <div class="preview-section" id="previewSection" style="display: none;">
-                <h3 class="preview-title">Preview</h3>
+                <h2 class="preview-title"><i class="fas fa-eye"></i> Thought Preview</h2>
                 <div class="preview-card" id="thoughtPreview">
                     <!-- Preview will be inserted here -->
                 </div>
@@ -889,7 +1106,7 @@ if ($result) {
                 <div class="table-header">
                     <h2 class="table-title">Published Thoughts</h2>
                     <span class="btn btn-secondary">
-                        <i class="fas fa-sync-alt"></i> <?php echo count($thoughts); ?> Total
+                        <i class="fas fa-sync-alt"></i> <?php echo htmlspecialchars(count($thoughts), ENT_QUOTES, 'UTF-8'); ?> Total
                     </span>
                 </div>
                 
@@ -908,25 +1125,26 @@ if ($result) {
                                     <td>
                                         <div class="preview-date">
                                             <i class="far fa-calendar"></i>
-                                            <?php echo date('M j, Y \a\t g:i A', strtotime($thought['thought_date'])); ?>
+                                            <?php echo htmlspecialchars(date('M j, Y \a\t g:i A', strtotime($thought['thought_date'])), ENT_QUOTES, 'UTF-8'); ?>
                                         </div>
                                     </td>
                                     <td>
                                         <div class="thought-text">
                                             <?php 
-                                                $text = htmlspecialchars($thought['thought_text']);
+                                                $text = htmlspecialchars($thought['thought_text'], ENT_QUOTES, 'UTF-8');
                                                 echo strlen($text) > 200 ? substr($text, 0, 200) . '...' : $text;
                                             ?>
                                         </div>
                                     </td>
                                     <td>
                                         <div class="table-actions">
-                                            <button class="btn btn-secondary btn-sm" onclick="editThought(<?php echo $thought['id']; ?>, '<?php echo addslashes($thought['thought_text']); ?>')">
+                                            <button class="btn btn-secondary btn-sm" 
+                                                    onclick="editThought(<?php echo (int)$thought['id']; ?>, <?php echo htmlspecialchars(json_encode($thought['thought_text']), ENT_QUOTES, 'UTF-8'); ?>)">
                                                 <i class="fas fa-edit"></i> Edit
                                             </button>
-                                            <a href="?delete=<?php echo $thought['id']; ?>" 
+                                            <a href="?delete=<?php echo (int)$thought['id']; ?>&csrf_token=<?php echo htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8'); ?>" 
                                                class="btn btn-danger btn-sm"
-                                               onclick="return confirmDelete(event, <?php echo $thought['id']; ?>)">
+                                               onclick="return confirmDelete(event, <?php echo (int)$thought['id']; ?>)">
                                                 <i class="fas fa-trash"></i> Delete
                                             </a>
                                         </div>
@@ -954,12 +1172,17 @@ if ($result) {
                 <h2 class="modal-title">Edit Thought</h2>
             </div>
             <form id="editForm" method="POST" action="">
+                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8'); ?>">
                 <div class="form-group">
                     <label class="form-label" for="edit_text">Thought Text *</label>
-                    <textarea id="edit_text" name="edit_text" class="form-textarea" required></textarea>
+                    <textarea id="edit_text" name="edit_text" class="form-textarea" required maxlength="1000"></textarea>
                     <small style="color: #666; margin-top: 5px; display: block;">
                         Maximum 1000 characters. Current: <span id="editCharCount">0</span>
                     </small>
+                    <div id="editError" class="validation-error" style="display: none;">
+                        <i class="fas fa-exclamation-circle"></i>
+                        <span></span>
+                    </div>
                 </div>
                 <input type="hidden" id="edit_id" name="edit_id">
                 <input type="hidden" name="update_thought" value="1">
@@ -979,13 +1202,13 @@ if ($result) {
                 <i class="fas fa-exclamation-triangle"></i> Confirm Deletion
             </h2>
             <p style="color: #ddd; font-size: 1.1rem; margin-bottom: 30px;">
-                <?php echo htmlspecialchars($confirm_message); ?>
+                <?php echo htmlspecialchars($confirm_message, ENT_QUOTES, 'UTF-8'); ?>
             </p>
             <div class="confirmation-actions">
-                <a href="?delete=<?php echo $id; ?>&confirm=yes" class="btn btn-danger">
+                <a href="?delete=<?php echo (int)$confirm_id; ?>&confirm=yes&csrf_token=<?php echo htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8'); ?>" class="btn btn-danger">
                     <i class="fas fa-trash"></i> Yes, Delete
                 </a>
-                <a href="<?php echo $_SERVER['PHP_SELF']; ?>" class="btn btn-secondary">
+                <a href="<?php echo htmlspecialchars($_SERVER['PHP_SELF'], ENT_QUOTES, 'UTF-8'); ?>" class="btn btn-secondary">
                     <i class="fas fa-times"></i> Cancel
                 </a>
             </div>
@@ -994,193 +1217,406 @@ if ($result) {
     <?php endif; ?>
     
     <script>
-        // Update current time
-        function updateTime() {
-            const now = new Date();
-            const options = { 
-                weekday: 'long', 
-                year: 'numeric', 
-                month: 'long', 
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit'
-            };
-            document.getElementById('currentTime').innerHTML = `
+    // Update current time
+    function updateTime() {
+        const now = new Date();
+        const options = { 
+            weekday: 'long', 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        };
+        const timeElement = document.getElementById('currentTime');
+        if (timeElement) {
+            timeElement.innerHTML = `
                 <i class="far fa-clock"></i> ${now.toLocaleDateString('en-US', options)}
             `;
         }
-        
-        // Update time every second
-        updateTime();
-        setInterval(updateTime, 1000);
-        
-        // Character counter for thought text
-        const thoughtText = document.getElementById('thought_text');
-        const charCount = document.getElementById('charCount');
-        const editText = document.getElementById('edit_text');
-        const editCharCount = document.getElementById('editCharCount');
-        
-        if (thoughtText) {
-            thoughtText.addEventListener('input', function() {
-                charCount.textContent = this.value.length;
-            });
-            // Initialize count
-            charCount.textContent = thoughtText.value.length;
-        }
-        
-        if (editText) {
-            editText.addEventListener('input', function() {
-                editCharCount.textContent = this.value.length;
-            });
-        }
-        
-        // Form validation
-        function validateForm() {
-            const text = document.getElementById('thought_text').value.trim();
+    }
+    
+    // Update time every second
+    updateTime();
+    setInterval(updateTime, 1000);
+    
+    // Character counter for thought text
+    const thoughtText = document.getElementById('thought_text');
+    const charCount = document.getElementById('charCount');
+    const editText = document.getElementById('edit_text');
+    const editCharCount = document.getElementById('editCharCount');
+    
+    function updateCharCounter(textarea, counter) {
+        if (textarea && counter) {
+            const length = textarea.value.length;
+            counter.textContent = length;
             
-            if (!text) {
-                alert('Please enter your thought.');
+            // Add warning color if approaching limit
+            if (length > 900) {
+                counter.classList.add('char-limit-danger');
+                counter.classList.remove('char-limit-warning');
+            } else if (length > 800) {
+                counter.classList.add('char-limit-warning');
+                counter.classList.remove('char-limit-danger');
+            } else {
+                counter.classList.remove('char-limit-warning', 'char-limit-danger');
+            }
+        }
+    }
+    
+    if (thoughtText && charCount) {
+        thoughtText.addEventListener('input', function() {
+            updateCharCounter(this, charCount);
+            autoResize(this);
+            clearError('thoughtError');
+        });
+        // Initialize count
+        updateCharCounter(thoughtText, charCount);
+    }
+    
+    if (editText && editCharCount) {
+        editText.addEventListener('input', function() {
+            updateCharCounter(this, editCharCount);
+            autoResize(this);
+            clearError('editError');
+        });
+    }
+    
+    // Form validation
+    function validateForm() {
+        const textElement = document.getElementById('thought_text');
+        const text = textElement.value.trim();
+        const csrfToken = document.querySelector('input[name="csrf_token"]');
+        const errorDiv = document.getElementById('thoughtError');
+        
+        // Clear previous errors
+        clearError('thoughtError');
+        
+        if (!csrfToken || !csrfToken.value) {
+            showError('thoughtError', 'Security token missing. Please refresh the page.');
+            return false;
+        }
+        
+        if (!text) {
+            showError('thoughtError', 'Please enter your thought.');
+            textElement.focus();
+            return false;
+        }
+        
+        if (text.length > 1000) {
+            showError('thoughtError', 'Thought must be 1000 characters or less.');
+            textElement.focus();
+            return false;
+        }
+        
+        // Check for excessive newlines (potential spam)
+        const newlineCount = (text.match(/\n/g) || []).length;
+        if (newlineCount > 50) {
+            showError('thoughtError', 'Too many line breaks. Please format your thought properly.');
+            textElement.focus();
+            return false;
+        }
+        
+        // Check for suspicious patterns (very basic)
+        const suspiciousPatterns = [
+            /<script/i,
+            /javascript:/i,
+            /onclick=/i,
+            /onload=/i,
+            /eval\(/i,
+            /document\./i,
+            /window\./i,
+            /alert\(/i
+        ];
+        
+        for (const pattern of suspiciousPatterns) {
+            if (pattern.test(text)) {
+                showError('thoughtError', 'Invalid content detected. Please remove any scripts or event handlers.');
+                textElement.focus();
                 return false;
             }
-            
-            if (text.length > 1000) {
-                alert('Thought text cannot exceed 1000 characters.');
-                return false;
-            }
-            
-            return true;
         }
         
-        // Preview thought
-        function previewThought() {
-            const text = document.getElementById('thought_text').value.trim();
-            const previewSection = document.getElementById('previewSection');
-            const previewCard = document.getElementById('thoughtPreview');
-            
-            if (!text) {
-                alert('Please enter a thought to preview.');
-                return;
-            }
-            
-            previewCard.innerHTML = `
-                <div class="preview-date">
-                    <i class="far fa-calendar"></i> ${new Date().toLocaleDateString('en-US', { 
-                        month: 'short', 
-                        day: 'numeric', 
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                    })}
-                </div>
-                <div class="preview-text">${text.replace(/\n/g, '<br>')}</div>
-            `;
-            
-            previewSection.style.display = 'block';
-            previewSection.scrollIntoView({ behavior: 'smooth' });
+        return true;
+    }
+    
+    // Show error message
+    function showError(elementId, message) {
+        const errorDiv = document.getElementById(elementId);
+        if (errorDiv) {
+            errorDiv.querySelector('span').textContent = message;
+            errorDiv.style.display = 'flex';
+            errorDiv.style.animation = 'slideIn 0.3s ease';
+        }
+    }
+    
+    // Clear error message
+    function clearError(elementId) {
+        const errorDiv = document.getElementById(elementId);
+        if (errorDiv) {
+            errorDiv.style.display = 'none';
+        }
+    }
+    
+    // Reset form
+    function resetForm() {
+        if (thoughtText && charCount) {
+            updateCharCounter(thoughtText, charCount);
+        }
+        clearError('thoughtError');
+        document.getElementById('previewSection').style.display = 'none';
+    }
+    
+    // Preview thought with XSS protection
+    function previewThought() {
+        const textElement = document.getElementById('thought_text');
+        const text = textElement.value.trim();
+        const previewSection = document.getElementById('previewSection');
+        const previewCard = document.getElementById('thoughtPreview');
+        
+        // Clear previous errors
+        clearError('thoughtError');
+        
+        if (!text) {
+            showError('thoughtError', 'Please enter a thought to preview.');
+            textElement.focus();
+            return;
         }
         
-        // Edit thought modal
-        function editThought(id, text) {
-            document.getElementById('edit_id').value = id;
-            document.getElementById('edit_text').value = text.replace(/\\'/g, "'").replace(/\\"/g, '"');
-            editCharCount.textContent = text.length;
-            document.getElementById('editModal').style.display = 'flex';
+        if (text.length > 1000) {
+            showError('thoughtError', 'Thought must be 1000 characters or less.');
+            textElement.focus();
+            return;
+        }
+        
+        // Sanitize text for display
+        const sanitizedText = text
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;')
+            .replace(/\n/g, '<br>');
+        
+        previewCard.innerHTML = `
+            <div class="preview-date">
+                <i class="far fa-calendar"></i> ${new Date().toLocaleDateString('en-US', { 
+                    month: 'short', 
+                    day: 'numeric', 
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                })}
+            </div>
+            <div class="preview-text">${sanitizedText}</div>
+        `;
+        
+        previewSection.style.display = 'block';
+        previewSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    
+    // Edit thought modal
+    function editThought(id, text) {
+        document.getElementById('edit_id').value = id;
+        document.getElementById('edit_text').value = text;
+        updateCharCounter(document.getElementById('edit_text'), editCharCount);
+        document.getElementById('editModal').style.display = 'flex';
+        clearError('editError');
+        
+        // Focus on textarea and resize
+        setTimeout(() => {
+            const editTextarea = document.getElementById('edit_text');
+            editTextarea.focus();
+            autoResize(editTextarea);
+        }, 100);
+    }
+    
+    // Confirm deletion
+    function confirmDelete(event, id) {
+        event.preventDefault();
+        event.stopPropagation();
+        
+        if (confirm('Are you sure you want to delete this thought?\nThis action cannot be undone.')) {
+            const csrfToken = document.querySelector('input[name="csrf_token"]')?.value;
+            if (csrfToken) {
+                window.location.href = `?delete=${id}&confirm=yes&csrf_token=${encodeURIComponent(csrfToken)}`;
+            } else {
+                // Fallback if csrf token not found
+                if (confirm('Security token not found. Continue anyway?')) {
+                    window.location.href = `?delete=${id}&confirm=yes`;
+                }
+            }
+        }
+        return false;
+    }
+    
+    // Close modal
+    function closeModal() {
+        document.getElementById('editModal').style.display = 'none';
+        // Reset form
+        document.getElementById('editForm').reset();
+        if (editCharCount) {
+            editCharCount.textContent = '0';
+            editCharCount.classList.remove('char-limit-warning', 'char-limit-danger');
+        }
+        clearError('editError');
+    }
+    
+    // Close confirmation modal
+    function closeConfirmationModal() {
+        const modal = document.getElementById('confirmationModal');
+        if (modal) {
+            modal.style.display = 'none';
+        }
+        window.location.href = '<?php echo htmlspecialchars($_SERVER['PHP_SELF'], ENT_QUOTES, 'UTF-8'); ?>';
+    }
+    
+    // Close message
+    function closeMessage(button) {
+        const message = button.closest('.message');
+        if (message) {
+            message.style.transition = 'opacity 0.5s ease, transform 0.5s ease, margin 0.5s ease, padding 0.5s ease';
+            message.style.opacity = '0';
+            message.style.transform = 'translateY(-20px)';
             
-            // Focus on textarea
             setTimeout(() => {
-                document.getElementById('edit_text').focus();
-            }, 100);
+                message.style.display = 'none';
+                // Remove from DOM after animation
+                message.parentNode.removeChild(message);
+            }, 500);
         }
-        
-        // Confirm deletion
-        function confirmDelete(event, id) {
-            event.preventDefault();
-            if (confirm('Are you sure you want to delete this thought?\nThis action cannot be undone.')) {
-                window.location.href = `?delete=${id}&confirm=yes`;
-            }
-        }
-        
-        // Close modal
-        function closeModal() {
-            document.getElementById('editModal').style.display = 'none';
-            // Reset form if needed
-            document.getElementById('editForm').reset();
-        }
-        
-        // Close confirmation modal
-        function closeConfirmationModal() {
-            document.getElementById('confirmationModal').style.display = 'none';
-            window.location.href = '<?php echo $_SERVER['PHP_SELF']; ?>';
-        }
-        
-        // Auto-resize textarea
-        function autoResize(textarea) {
+    }
+    
+    // Auto-resize textarea
+    function autoResize(textarea) {
+        if (textarea) {
             textarea.style.height = 'auto';
-            textarea.style.height = (textarea.scrollHeight) + 'px';
+            const newHeight = Math.min(textarea.scrollHeight, 300); // Max height 300px
+            textarea.style.height = newHeight + 'px';
         }
-        
-        // Initialize textarea auto-resize
+    }
+    
+    // Initialize textarea auto-resize
+    document.addEventListener('DOMContentLoaded', function() {
         document.querySelectorAll('.form-textarea').forEach(textarea => {
             textarea.addEventListener('input', function() {
                 autoResize(this);
             });
             // Initial resize
-            autoResize(textarea);
+            setTimeout(() => autoResize(textarea), 100);
         });
         
-        // Auto-hide messages after 5 seconds
-        setTimeout(function() {
-            const messages = document.querySelectorAll('.message');
-            messages.forEach(message => {
-                message.style.transition = 'opacity 0.5s ease';
-                message.style.opacity = '0';
-                setTimeout(() => {
-                    if (message.parentNode) {
-                        message.style.display = 'none';
-                    }
-                }, 500);
-            });
-        }, 5000);
+        // Auto-close success messages after 5 seconds
+        const successMessages = document.querySelectorAll('.message.success');
+        successMessages.forEach(message => {
+            setTimeout(() => {
+                const closeBtn = message.querySelector('.message-close');
+                if (closeBtn) closeMessage(closeBtn);
+            }, 5000);
+        });
         
-        // Close modal when clicking outside
-        window.onclick = function(event) {
-            const modal = document.getElementById('editModal');
-            const confirmationModal = document.getElementById('confirmationModal');
-            
-            if (event.target === modal) {
-                closeModal();
-            }
-            if (event.target === confirmationModal) {
-                closeConfirmationModal();
+        // Auto-close error messages after 8 seconds
+        const errorMessages = document.querySelectorAll('.message.error');
+        errorMessages.forEach(message => {
+            setTimeout(() => {
+                const closeBtn = message.querySelector('.message-close');
+                if (closeBtn) closeMessage(closeBtn);
+            }, 8000);
+        });
+        
+        // Show confirmation modal if needed
+        <?php if (isset($confirm_message)): ?>
+        document.getElementById('confirmationModal').style.display = 'flex';
+        <?php endif; ?>
+        
+        // Add input event listeners for form validation
+        const forms = document.querySelectorAll('form');
+        forms.forEach(form => {
+            form.addEventListener('submit', function(e) {
+                if (!this.checkValidity()) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+                this.classList.add('was-validated');
+            });
+        });
+    });
+    
+    // Close modal when clicking outside
+    window.onclick = function(event) {
+        const modal = document.getElementById('editModal');
+        const confirmationModal = document.getElementById('confirmationModal');
+        
+        if (event.target === modal) {
+            closeModal();
+        }
+        if (event.target === confirmationModal) {
+            closeConfirmationModal();
+        }
+    }
+    
+    // Keyboard shortcuts
+    document.addEventListener('keydown', function(e) {
+        // Ctrl + Enter to submit main form
+        if (e.ctrlKey && e.key === 'Enter' && !document.getElementById('editModal').style.display) {
+            if (document.getElementById('thoughtForm')) {
+                document.getElementById('thoughtForm').submit();
             }
         }
         
-        // Keyboard shortcuts
-        document.addEventListener('keydown', function(e) {
-            // Ctrl + Enter to submit main form
-            if (e.ctrlKey && e.key === 'Enter' && !document.getElementById('editModal').style.display) {
-                if (document.getElementById('thoughtForm')) {
-                    document.getElementById('thoughtForm').submit();
-                }
-            }
+        // Escape to close modal and messages
+        if (e.key === 'Escape') {
+            closeModal();
+            closeConfirmationModal();
             
-            // Escape to close modal
-            if (e.key === 'Escape') {
-                closeModal();
-                closeConfirmationModal();
+            // Close all messages
+            document.querySelectorAll('.message').forEach(message => {
+                const closeBtn = message.querySelector('.message-close');
+                if (closeBtn) closeMessage(closeBtn);
+            });
+        }
+    });
+    
+    // Store message state in sessionStorage to prevent showing again if page is refreshed
+    window.addEventListener('beforeunload', function() {
+        const messages = document.querySelectorAll('.message');
+        messages.forEach(message => {
+            const messageText = message.querySelector('span')?.textContent;
+            if (messageText) {
+                sessionStorage.setItem('lastMessage', messageText);
+                sessionStorage.setItem('lastMessageTime', Date.now());
             }
         });
+    });
+    
+    // Check if same message was shown recently
+    window.addEventListener('load', function() {
+        const lastMessage = sessionStorage.getItem('lastMessage');
+        const lastMessageTime = sessionStorage.getItem('lastMessageTime');
+        const currentTime = Date.now();
         
-        // Check if there's a hash in URL (for scrolling)
-        window.addEventListener('load', function() {
-            if (window.location.hash) {
-                const element = document.querySelector(window.location.hash);
-                if (element) {
-                    element.scrollIntoView({ behavior: 'smooth' });
-                }
+        if (lastMessage && lastMessageTime && (currentTime - lastMessageTime) < 3000) {
+            // Same message was shown within 3 seconds, hide it faster
+            const currentMessage = document.querySelector('.message span');
+            if (currentMessage && currentMessage.textContent === lastMessage) {
+                const message = currentMessage.closest('.message');
+                setTimeout(() => {
+                    const closeBtn = message.querySelector('.message-close');
+                    if (closeBtn) closeMessage(closeBtn);
+                }, 1000);
             }
-        });
+        }
+        
+        // Clear stored message after checking
+        sessionStorage.removeItem('lastMessage');
+        sessionStorage.removeItem('lastMessageTime');
+    });
+    
+    // Prevent form resubmission on page refresh
+    if (window.history.replaceState) {
+        window.history.replaceState(null, null, window.location.href);
+    }
     </script>
 </body>
 </html>
