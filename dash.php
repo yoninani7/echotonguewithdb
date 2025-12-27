@@ -202,7 +202,7 @@ if (isset($_GET['delete'])) {
             $message_type = "error";
         } elseif (!isset($_GET['confirm'])) {
             // Show confirmation dialog
-            $confirm_message = "Are you sure you want to delete this thought?";
+            $confirm_message = "Are you sure you want to delete this thought? This action cannot be undone.";
             $confirm_id = $id;
         } elseif (isset($_GET['confirm']) && $_GET['confirm'] == 'yes') {
             // Perform deletion
@@ -301,6 +301,7 @@ if ($result) {
             font-family: var(--font-body);
             overflow-x: hidden;
             min-height: 100vh;
+            position: relative;
         }
 
         /* Dashboard Container */
@@ -319,6 +320,7 @@ if ($result) {
             top: 0;
             height: 100vh;
             backdrop-filter: blur(10px);
+            z-index: 100;
         }
 
         .sidebar-header {
@@ -422,6 +424,8 @@ if ($result) {
         .main-content {
             padding: 30px;
             overflow-y: auto;
+            position: relative;
+            z-index: 1;
         }
 
         .dashboard-header {
@@ -581,6 +585,8 @@ if ($result) {
             display: inline-flex;
             align-items: center;
             gap: 8px;
+            position: relative;
+            overflow: hidden;
         }
 
         .btn:hover {
@@ -695,6 +701,7 @@ if ($result) {
                 height: auto;
                 z-index: 1000;
                 padding: 15px;
+                height: 70px;
             }
             
             .sidebar-header,
@@ -706,6 +713,7 @@ if ($result) {
                 display: flex;
                 justify-content: center;
                 gap: 10px;
+                flex-wrap: wrap;
             }
             
             .nav-item {
@@ -713,11 +721,11 @@ if ($result) {
             }
             
             .nav-link span {
-                display: none;
+                font-size: 0.8rem;
             }
             
             .main-content {
-                margin-top: 80px;
+                margin-top: 70px;
             }
         }
 
@@ -737,6 +745,10 @@ if ($result) {
             
             .table-actions {
                 flex-direction: column;
+            }
+            
+            .nav-link span {
+                display: none;
             }
         }
 
@@ -765,21 +777,38 @@ if ($result) {
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.8);
-            z-index: 1001;
+            background: rgba(0, 0, 0, 0.95);
+            z-index: 9999;
             align-items: center;
             justify-content: center;
-            backdrop-filter: blur(5px);
+            backdrop-filter: blur(10px);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .modal.show {
+            display: flex !important;
+            opacity: 1;
         }
 
         .modal-content {
-            background: rgba(20, 20, 20, 0.95);
+            background: rgba(20, 20, 20, 0.98);
             border-radius: 15px;
             padding: 40px;
             width: 90%;
-            max-width: 500px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            position: relative;
+            max-width: 600px;
+            max-height: 90vh;
+            overflow-y: auto;
+            border: 1px solid rgba(201, 19, 19, 0.3);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+            transform: translateY(-30px);
+            opacity: 0;
+            transition: all 0.4s ease;
+        }
+
+        .modal.show .modal-content {
+            transform: translateY(0);
+            opacity: 1;
         }
 
         .modal-header {
@@ -803,6 +832,7 @@ if ($result) {
             cursor: pointer;
             transition: var(--transition);
             padding: 5px;
+            z-index: 1;
         }
 
         .modal-close:hover {
@@ -849,6 +879,7 @@ if ($result) {
         .preview-text {
             line-height: 1.6;
             color: #ddd;
+            word-wrap: break-word;
         }
 
         /* Loading Animation */
@@ -874,6 +905,8 @@ if ($result) {
             border: 1px solid rgba(255, 255, 255, 0.05);
             font-size: 0.9rem;
             color: #aaa;
+            margin-bottom: 20px;
+            display: inline-block;
         }
         
         .current-time i {
@@ -900,22 +933,38 @@ if ($result) {
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.8);
-            z-index: 1002;
-            display: flex;
+            background: rgba(0, 0, 0, 0.95);
+            z-index: 10000;
+            display: none;
             align-items: center;
             justify-content: center;
-            backdrop-filter: blur(5px);
+            backdrop-filter: blur(10px);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        
+        .confirmation-modal.show {
+            display: flex !important;
+            opacity: 1;
         }
         
         .confirmation-content {
-            background: rgba(20, 20, 20, 0.95);
+            background: rgba(20, 20, 20, 0.98);
             border-radius: 15px;
             padding: 40px;
             width: 90%;
             max-width: 500px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(201, 19, 19, 0.3);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
             text-align: center;
+            transform: translateY(-30px);
+            opacity: 0;
+            transition: all 0.4s ease;
+        }
+        
+        .confirmation-modal.show .confirmation-content {
+            transform: translateY(0);
+            opacity: 1;
         }
         
         .confirmation-actions {
@@ -928,7 +977,7 @@ if ($result) {
         /* Responsive fixes */
         @media (max-width: 1024px) {
             .main-content {
-                margin-top: 100px;
+                margin-top: 70px;
                 padding-top: 20px;
             }
         }
@@ -980,6 +1029,7 @@ if ($result) {
             display: flex;
             align-items: center;
             gap: 5px;
+            animation: slideIn 0.3s ease;
         }
         
         .char-limit-warning {
@@ -989,6 +1039,54 @@ if ($result) {
         .char-limit-danger {
             color: #ff6b6b !important;
         }
+        
+        /* Character counter */
+        .char-counter {
+            text-align: right;
+            font-size: 0.8rem;
+            margin-top: 5px;
+            color: #666;
+        }
+        
+        /* Modal backdrop */
+        .modal-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 9998;
+            display: none;
+        }
+        
+        .modal-backdrop.show {
+            display: block;
+        }
+        
+        /* Textarea auto-resize */
+        .auto-resize {
+            transition: height 0.2s ease;
+        }
+        
+        /* Button focus states */
+        .btn:focus {
+            outline: 2px solid var(--primary-red);
+            outline-offset: 2px;
+        }
+        
+        /* Accessibility improvements */
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
     </style>
 </head>
 <body>
@@ -997,6 +1095,7 @@ if ($result) {
         <aside class="sidebar">
             <div class="sidebar-header">
                 <a href="index.html" class="logo"> 
+                    <i class="fas fa-feather-alt"></i>
                     <span>ECHOTONGUE</span>
                 </a>
             </div>
@@ -1049,7 +1148,7 @@ if ($result) {
             <div class="message <?php echo htmlspecialchars($message_type, ENT_QUOTES, 'UTF-8'); ?>" id="messageBox">
                 <i class="fas fa-<?php echo $message_type === 'success' ? 'check-circle' : 'exclamation-circle'; ?>"></i>
                 <span><?php echo htmlspecialchars($message, ENT_QUOTES, 'UTF-8'); ?></span>
-                <button class="message-close" onclick="closeMessage(this)">
+                <button class="message-close" onclick="closeMessage(this)" aria-label="Close message">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
@@ -1059,34 +1158,35 @@ if ($result) {
             <div class="form-card">
                 <h2><i class="fas fa-plus-circle"></i> Add New Thought</h2>
                 
-                <form method="POST" action="" id="thoughtForm" onsubmit="return validateForm()">
+                <form method="POST" action="" id="thoughtForm">
                     <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8'); ?>">
                     <div class="form-group">
                         <label class="form-label" for="thought_text">Thought Text *</label>
                         <textarea 
                             id="thought_text" 
                             name="thought_text" 
-                            class="form-textarea"  
+                            class="form-textarea auto-resize"  
                             placeholder="Share your writing insights, inspirations, or reflections..."
                             required
-                            maxlength="1000"></textarea> 
-                        <small style="color: #666; margin-top: 5px; display: block;">
-                            Maximum 1000 characters. Current: <span id="charCount">0</span>
-                        </small>
+                            maxlength="1000"
+                            oninput="updateCharCounter(this, 'charCount'); autoResize(this); clearError('thoughtError');"></textarea> 
+                        <div class="char-counter">
+                            <span id="charCount">0</span> / 1000 characters
+                        </div>
                         <div id="thoughtError" class="validation-error" style="display: none;">
                             <i class="fas fa-exclamation-circle"></i>
                             <span></span>
                         </div>
                     </div>
                     
-                    <div class="form-group">
-                        <button type="submit" name="add_thought" class="btn">
+                    <div class="form-group action-buttons">
+                        <button type="submit" name="add_thought" class="btn" onclick="return validateForm()">
                             <i class="fas fa-paper-plane"></i> Publish Thought
                         </button>
-                        <button type="button" class="btn btn-secondary" onclick="previewThought()" style="margin-left: 10px;">
+                        <button type="button" class="btn btn-secondary" onclick="previewThought()">
                             <i class="fas fa-eye"></i> Preview
                         </button>
-                        <button type="reset" class="btn btn-secondary" style="margin-left: 10px;" onclick="resetForm()">
+                        <button type="reset" class="btn btn-secondary" onclick="resetForm()">
                             <i class="fas fa-redo"></i> Clear
                         </button>
                     </div>
@@ -1139,7 +1239,7 @@ if ($result) {
                                     <td>
                                         <div class="table-actions">
                                             <button class="btn btn-secondary btn-sm" 
-                                                    onclick="editThought(<?php echo (int)$thought['id']; ?>, <?php echo htmlspecialchars(json_encode($thought['thought_text']), ENT_QUOTES, 'UTF-8'); ?>)">
+                                                    onclick="editThought(<?php echo (int)$thought['id']; ?>, '<?php echo addslashes(htmlspecialchars($thought['thought_text'], ENT_QUOTES, 'UTF-8')); ?>')">
                                                 <i class="fas fa-edit"></i> Edit
                                             </button>
                                             <a href="?delete=<?php echo (int)$thought['id']; ?>&csrf_token=<?php echo htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8'); ?>" 
@@ -1167,28 +1267,42 @@ if ($result) {
     <!-- Edit Modal -->
     <div class="modal" id="editModal">
         <div class="modal-content">
-            <button class="modal-close" onclick="closeModal()">&times;</button>
+            <button class="modal-close" onclick="closeModal()" aria-label="Close modal">&times;</button>
             <div class="modal-header">
-                <h2 class="modal-title">Edit Thought</h2>
+                <h2 class="modal-title"><i class="fas fa-edit"></i> Edit Thought</h2>
             </div>
             <form id="editForm" method="POST" action="">
                 <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8'); ?>">
+                <input type="hidden" name="update_thought" value="1">
+                
                 <div class="form-group">
                     <label class="form-label" for="edit_text">Thought Text *</label>
-                    <textarea id="edit_text" name="edit_text" class="form-textarea" required maxlength="1000"></textarea>
-                    <small style="color: #666; margin-top: 5px; display: block;">
-                        Maximum 1000 characters. Current: <span id="editCharCount">0</span>
-                    </small>
+                    <textarea 
+                        id="edit_text" 
+                        name="edit_text" 
+                        class="form-textarea auto-resize" 
+                        required 
+                        maxlength="1000"
+                        placeholder="Edit your thought..."
+                        oninput="updateCharCounter(this, 'editCharCount'); autoResize(this); clearError('editError');"></textarea>
+                    <div class="char-counter">
+                        <span id="editCharCount">0</span> / 1000 characters
+                    </div>
                     <div id="editError" class="validation-error" style="display: none;">
                         <i class="fas fa-exclamation-circle"></i>
                         <span></span>
                     </div>
                 </div>
+                
                 <input type="hidden" id="edit_id" name="edit_id">
-                <input type="hidden" name="update_thought" value="1">
+                
                 <div class="modal-actions">
-                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-                    <button type="submit" class="btn">Update Thought</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">
+                        <i class="fas fa-times"></i> Cancel
+                    </button>
+                    <button type="submit" class="btn" onclick="return validateEditForm()">
+                        <i class="fas fa-save"></i> Update Thought
+                    </button>
                 </div>
             </form>
         </div>
@@ -1196,7 +1310,7 @@ if ($result) {
     
     <!-- Confirmation Modal -->
     <?php if (isset($confirm_message)): ?>
-    <div class="confirmation-modal" id="confirmationModal">
+    <div class="confirmation-modal <?php echo $confirm_message ? 'show' : ''; ?>" id="confirmationModal">
         <div class="confirmation-content">
             <h2 style="color: var(--primary-red); margin-bottom: 20px;">
                 <i class="fas fa-exclamation-triangle"></i> Confirm Deletion
@@ -1231,8 +1345,9 @@ if ($result) {
         };
         const timeElement = document.getElementById('currentTime');
         if (timeElement) {
+            const timeString = now.toLocaleDateString('en-US', options);
             timeElement.innerHTML = `
-                <i class="far fa-clock"></i> ${now.toLocaleDateString('en-US', options)}
+                <i class="far fa-clock"></i> ${timeString}
             `;
         }
     }
@@ -1242,12 +1357,8 @@ if ($result) {
     setInterval(updateTime, 1000);
     
     // Character counter for thought text
-    const thoughtText = document.getElementById('thought_text');
-    const charCount = document.getElementById('charCount');
-    const editText = document.getElementById('edit_text');
-    const editCharCount = document.getElementById('editCharCount');
-    
-    function updateCharCounter(textarea, counter) {
+    function updateCharCounter(textarea, counterId) {
+        const counter = document.getElementById(counterId);
         if (textarea && counter) {
             const length = textarea.value.length;
             counter.textContent = length;
@@ -1265,23 +1376,61 @@ if ($result) {
         }
     }
     
-    if (thoughtText && charCount) {
-        thoughtText.addEventListener('input', function() {
-            updateCharCounter(this, charCount);
-            autoResize(this);
-            clearError('thoughtError');
+    // Initialize character counters on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        const thoughtText = document.getElementById('thought_text');
+        const editText = document.getElementById('edit_text');
+        
+        if (thoughtText) {
+            updateCharCounter(thoughtText, 'charCount');
+        }
+        if (editText) {
+            updateCharCounter(editText, 'editCharCount');
+        }
+        
+        // Initialize textarea auto-resize
+        document.querySelectorAll('.auto-resize').forEach(textarea => {
+            autoResize(textarea);
         });
-        // Initialize count
-        updateCharCounter(thoughtText, charCount);
-    }
-    
-    if (editText && editCharCount) {
-        editText.addEventListener('input', function() {
-            updateCharCounter(this, editCharCount);
-            autoResize(this);
-            clearError('editError');
+        
+        // Auto-close success messages after 5 seconds
+        const successMessages = document.querySelectorAll('.message.success');
+        successMessages.forEach(message => {
+            setTimeout(() => {
+                const closeBtn = message.querySelector('.message-close');
+                if (closeBtn) closeMessage(closeBtn);
+            }, 5000);
         });
-    }
+        
+        // Auto-close error messages after 8 seconds
+        const errorMessages = document.querySelectorAll('.message.error');
+        errorMessages.forEach(message => {
+            setTimeout(() => {
+                const closeBtn = message.querySelector('.message-close');
+                if (closeBtn) closeMessage(closeBtn);
+            }, 8000);
+        });
+        
+        // Show confirmation modal if needed
+        const confirmationModal = document.getElementById('confirmationModal');
+        if (confirmationModal) {
+            setTimeout(() => {
+                confirmationModal.classList.add('show');
+            }, 100);
+        }
+        
+        // Add form validation
+        const forms = document.querySelectorAll('form');
+        forms.forEach(form => {
+            form.addEventListener('submit', function(e) {
+                if (!this.checkValidity()) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+                this.classList.add('was-validated');
+            });
+        });
+    });
     
     // Form validation
     function validateForm() {
@@ -1318,24 +1467,27 @@ if ($result) {
             return false;
         }
         
-        // Check for suspicious patterns (very basic)
-        const suspiciousPatterns = [
-            /<script/i,
-            /javascript:/i,
-            /onclick=/i,
-            /onload=/i,
-            /eval\(/i,
-            /document\./i,
-            /window\./i,
-            /alert\(/i
-        ];
+        return true;
+    }
+    
+    // Validate edit form
+    function validateEditForm() {
+        const textElement = document.getElementById('edit_text');
+        const text = textElement.value.trim();
+        const errorDiv = document.getElementById('editError');
         
-        for (const pattern of suspiciousPatterns) {
-            if (pattern.test(text)) {
-                showError('thoughtError', 'Invalid content detected. Please remove any scripts or event handlers.');
-                textElement.focus();
-                return false;
-            }
+        clearError('editError');
+        
+        if (!text) {
+            showError('editError', 'Please enter your thought.');
+            textElement.focus();
+            return false;
+        }
+        
+        if (text.length > 1000) {
+            showError('editError', 'Thought must be 1000 characters or less.');
+            textElement.focus();
+            return false;
         }
         
         return true;
@@ -1361,8 +1513,9 @@ if ($result) {
     
     // Reset form
     function resetForm() {
-        if (thoughtText && charCount) {
-            updateCharCounter(thoughtText, charCount);
+        const thoughtText = document.getElementById('thought_text');
+        if (thoughtText) {
+            updateCharCounter(thoughtText, 'charCount');
         }
         clearError('thoughtError');
         document.getElementById('previewSection').style.display = 'none';
@@ -1418,18 +1571,41 @@ if ($result) {
     
     // Edit thought modal
     function editThought(id, text) {
+        // Decode HTML entities
+        const decodedText = decodeHtmlEntities(text);
+        
         document.getElementById('edit_id').value = id;
-        document.getElementById('edit_text').value = text;
-        updateCharCounter(document.getElementById('edit_text'), editCharCount);
-        document.getElementById('editModal').style.display = 'flex';
+        document.getElementById('edit_text').value = decodedText;
+        updateCharCounter(document.getElementById('edit_text'), 'editCharCount');
+        
+        // Show the modal
+        const modal = document.getElementById('editModal');
+        modal.classList.add('show');
+        
+        // Animate modal content
+        setTimeout(() => {
+            modal.style.opacity = '1';
+        }, 10);
+        
         clearError('editError');
         
         // Focus on textarea and resize
         setTimeout(() => {
             const editTextarea = document.getElementById('edit_text');
-            editTextarea.focus();
-            autoResize(editTextarea);
+            if (editTextarea) {
+                editTextarea.focus();
+                autoResize(editTextarea);
+                // Set cursor at end
+                editTextarea.selectionStart = editTextarea.selectionEnd = editTextarea.value.length;
+            }
         }, 100);
+    }
+    
+    // Helper function to decode HTML entities
+    function decodeHtmlEntities(text) {
+        const textarea = document.createElement('textarea');
+        textarea.innerHTML = text;
+        return textarea.value;
     }
     
     // Confirm deletion
@@ -1443,123 +1619,87 @@ if ($result) {
                 window.location.href = `?delete=${id}&confirm=yes&csrf_token=${encodeURIComponent(csrfToken)}`;
             } else {
                 // Fallback if csrf token not found
-                if (confirm('Security token not found. Continue anyway?')) {
-                    window.location.href = `?delete=${id}&confirm=yes`;
+                if (confirm('Security token not found. Refresh page and try again.')) {
+                    window.location.reload();
                 }
             }
         }
         return false;
     }
     
-    // Close modal
+    // Close edit modal
     function closeModal() {
-        document.getElementById('editModal').style.display = 'none';
-        // Reset form
-        document.getElementById('editForm').reset();
-        if (editCharCount) {
-            editCharCount.textContent = '0';
-            editCharCount.classList.remove('char-limit-warning', 'char-limit-danger');
-        }
-        clearError('editError');
+        const modal = document.getElementById('editModal');
+        modal.classList.remove('show');
+        
+        // Reset form after animation
+        setTimeout(() => {
+            document.getElementById('editForm').reset();
+            const editCharCount = document.getElementById('editCharCount');
+            if (editCharCount) {
+                editCharCount.textContent = '0';
+                editCharCount.classList.remove('char-limit-warning', 'char-limit-danger');
+            }
+            clearError('editError');
+        }, 300);
     }
     
     // Close confirmation modal
     function closeConfirmationModal() {
         const modal = document.getElementById('confirmationModal');
         if (modal) {
-            modal.style.display = 'none';
+            modal.classList.remove('show');
         }
-        window.location.href = '<?php echo htmlspecialchars($_SERVER['PHP_SELF'], ENT_QUOTES, 'UTF-8'); ?>';
+        // Don't redirect, just close
     }
     
     // Close message
     function closeMessage(button) {
         const message = button.closest('.message');
         if (message) {
-            message.style.transition = 'opacity 0.5s ease, transform 0.5s ease, margin 0.5s ease, padding 0.5s ease';
             message.style.opacity = '0';
             message.style.transform = 'translateY(-20px)';
+            message.style.marginBottom = '0';
+            message.style.paddingTop = '0';
+            message.style.paddingBottom = '0';
+            message.style.height = '0';
+            message.style.overflow = 'hidden';
+            message.style.transition = 'all 0.3s ease';
             
             setTimeout(() => {
-                message.style.display = 'none';
-                // Remove from DOM after animation
-                message.parentNode.removeChild(message);
-            }, 500);
+                message.remove();
+            }, 300);
         }
     }
     
     // Auto-resize textarea
     function autoResize(textarea) {
-        if (textarea) {
-            textarea.style.height = 'auto';
-            const newHeight = Math.min(textarea.scrollHeight, 300); // Max height 300px
-            textarea.style.height = newHeight + 'px';
-        }
-    }
-    
-    // Initialize textarea auto-resize
-    document.addEventListener('DOMContentLoaded', function() {
-        document.querySelectorAll('.form-textarea').forEach(textarea => {
-            textarea.addEventListener('input', function() {
-                autoResize(this);
-            });
-            // Initial resize
-            setTimeout(() => autoResize(textarea), 100);
-        });
+        if (!textarea) return;
         
-        // Auto-close success messages after 5 seconds
-        const successMessages = document.querySelectorAll('.message.success');
-        successMessages.forEach(message => {
-            setTimeout(() => {
-                const closeBtn = message.querySelector('.message-close');
-                if (closeBtn) closeMessage(closeBtn);
-            }, 5000);
-        });
+        // Reset height
+        textarea.style.height = 'auto';
         
-        // Auto-close error messages after 8 seconds
-        const errorMessages = document.querySelectorAll('.message.error');
-        errorMessages.forEach(message => {
-            setTimeout(() => {
-                const closeBtn = message.querySelector('.message-close');
-                if (closeBtn) closeMessage(closeBtn);
-            }, 8000);
-        });
+        // Calculate new height (min 150px, max 400px)
+        const minHeight = 150;
+        const maxHeight = 400;
+        const scrollHeight = textarea.scrollHeight;
         
-        // Show confirmation modal if needed
-        <?php if (isset($confirm_message)): ?>
-        document.getElementById('confirmationModal').style.display = 'flex';
-        <?php endif; ?>
-        
-        // Add input event listeners for form validation
-        const forms = document.querySelectorAll('form');
-        forms.forEach(form => {
-            form.addEventListener('submit', function(e) {
-                if (!this.checkValidity()) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                }
-                this.classList.add('was-validated');
-            });
-        });
-    });
-    
-    // Close modal when clicking outside
-    window.onclick = function(event) {
-        const modal = document.getElementById('editModal');
-        const confirmationModal = document.getElementById('confirmationModal');
-        
-        if (event.target === modal) {
-            closeModal();
-        }
-        if (event.target === confirmationModal) {
-            closeConfirmationModal();
+        if (scrollHeight > maxHeight) {
+            textarea.style.height = maxHeight + 'px';
+            textarea.style.overflowY = 'auto';
+        } else if (scrollHeight < minHeight) {
+            textarea.style.height = minHeight + 'px';
+            textarea.style.overflowY = 'hidden';
+        } else {
+            textarea.style.height = scrollHeight + 'px';
+            textarea.style.overflowY = 'hidden';
         }
     }
     
     // Keyboard shortcuts
     document.addEventListener('keydown', function(e) {
         // Ctrl + Enter to submit main form
-        if (e.ctrlKey && e.key === 'Enter' && !document.getElementById('editModal').style.display) {
+        if (e.ctrlKey && e.key === 'Enter' && !document.getElementById('editModal').classList.contains('show')) {
             if (document.getElementById('thoughtForm')) {
                 document.getElementById('thoughtForm').submit();
             }
@@ -1569,14 +1709,26 @@ if ($result) {
         if (e.key === 'Escape') {
             closeModal();
             closeConfirmationModal();
-            
-            // Close all messages
-            document.querySelectorAll('.message').forEach(message => {
-                const closeBtn = message.querySelector('.message-close');
-                if (closeBtn) closeMessage(closeBtn);
-            });
         }
     });
+    
+    // Close modal when clicking outside
+    window.addEventListener('click', function(event) {
+        const editModal = document.getElementById('editModal');
+        const confirmationModal = document.getElementById('confirmationModal');
+        
+        if (event.target === editModal && editModal.classList.contains('show')) {
+            closeModal();
+        }
+        if (event.target === confirmationModal && confirmationModal.classList.contains('show')) {
+            closeConfirmationModal();
+        }
+    });
+    
+    // Prevent form resubmission on page refresh
+    if (window.history.replaceState) {
+        window.history.replaceState(null, null, window.location.href);
+    }
     
     // Store message state in sessionStorage to prevent showing again if page is refreshed
     window.addEventListener('beforeunload', function() {
@@ -1612,11 +1764,6 @@ if ($result) {
         sessionStorage.removeItem('lastMessage');
         sessionStorage.removeItem('lastMessageTime');
     });
-    
-    // Prevent form resubmission on page refresh
-    if (window.history.replaceState) {
-        window.history.replaceState(null, null, window.location.href);
-    }
     </script>
 </body>
 </html>
