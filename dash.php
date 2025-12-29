@@ -281,7 +281,7 @@ try {
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"> 
     <title>Dashboard | Author's Thoughts</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700&display=swap" rel="stylesheet">
@@ -739,6 +739,12 @@ try {
     .sidebar{
         display:none;
     }
+    .miniside{
+        display:block;
+    } 
+    body {
+        padding-top: 70px;
+    }
     /* .sidebar {
         position: fixed;
         width: 100%;
@@ -1115,12 +1121,7 @@ try {
             margin-top: 30px;
         }
         
-        /* Responsive fixes */
-        @media (max-width: 1024px) {
-           
-        }
-        
-        /* Make sure the form textarea doesn't overflow */
+        /* Responsive fixes */  
         .form-textarea {
             max-width: 100%;
             min-height: 150px;
@@ -1197,44 +1198,181 @@ try {
             white-space: nowrap;
             border: 0;
         } 
+/* Main Header Container */
+.miniside { 
+    display: flex;
+    align-items: center;
+    justify-content: space-between; 
+    background-color: rgba(20, 18, 18, 0.95); /* Deep dark with slight transparency */
+    backdrop-filter: blur(8px); /* Blur effect for modern browsers */
+    color: #ffffff;
+    height: 70px; 
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    z-index: 9999;
+    box-sizing: border-box;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* User Profile Section */
+.user-infoa {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-top:10px;
+}
+
+.user-avatar i {
+    font-size: 18px;
+    background: linear-gradient(135deg, #4a4a58, #2a2a35);
+    width: 42px;
+    height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 100%;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #ffffffff;
+}
+
+.user-text h3 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+}
+
+.user-role {
+    margin: 0;
+    font-size: 10px;
+    text-transform: uppercase;
+    font-weight: 500;
+    color: #e2e2e2ff; /* Accent Color */
+    letter-spacing: 1px;
+}
+
+/* Navigation Menu */
+.nav-menua {
+    display: flex;
+    list-style: none;
+    margin-top: 10px;
+    padding: 0;
+    gap: 8px;
+}
+
+.nav-linka {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 14px;
+    font-weight: 500;
+    padding: 10px 16px;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+
+/* Interaction States */
+.nav-linka:hover {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.08);
+    transform: translateY(-1px);
+}
+
+.nav-linka.active {
+    background: radial-gradient(100% 120% at 50% 0%, #df0211 0%, #500D11 100%);
+            
+    color: #ffffff;
+    box-shadow: 0 4px 15px rgba(226, 74, 74, 0.3);
+}
+
+.nav-linka.logout-btn:hover {
+    background: rgba(231, 76, 60, 0.2);
+    color: #ff6b6b;
+}
+
+/* --- Responsive Adjustments --- */
+
+/* For Tablets (Max 992px) */
+@media (max-width: 992px) {
+    .miniside {
+        padding: 0 20px;
+    }
+    .nav-linka {
+        padding: 10px 12px;
+    }
+}
+
+    /* For Mobile (Max 768px) */
+    @media (max-width: 768px) { 
+        .nav-menua {
+            gap: 5px;
+        }
+    }
+
+    .hid{
+    display:none;
+ 
+    }
+    @media (max-width: 1024px) {
+    .hid{
+    display:block;
+    }
+    }
+    @media (max-width: 650px) {
+    .user-text {
+            display: none; /* Hide name/role on mobile to save space */
+        }
+    }
+    @media (max-width: 534px) { 
+        .nav-linka span{
+            display:none;
+        }
+    }
     </style>
 </head>
 <body> 
-    
+    <div class="hid">
+<div class="miniside">
+    <div class="user-infoa">
+        <div class="user-avatar">
+            <i class="fas fa-user"></i>
+        </div>
+        <div class="user-text">
+            <h3 class="user-name">Hermona</h3>
+            <p class="user-role">Administrator</p>
+        </div>
+    </div>
+
+    <ul class="nav-menua">
+        <li class="nav-item">
+            <a href="#" class="nav-linka active">
+                <i class="fas fa-pen"></i>
+                <span>Manage Thoughts</span>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a href="index.html" class="nav-linka">
+                <i class="fas fa-home"></i>
+                <span>Back to Site</span>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a href="logout.php" class="nav-linka">
+                <i class="fas fa-sign-out-alt"></i>
+                <span>Logout</span>
+            </a>
+        </li>
+    </ul>
+</div>
+    </div>
+   
     <div class="dashboard-container">
 
-<div class="miniside" style="display:none;
-        flex-direction: row; ">
-    <div class="user-info">
-                <div class="user-avatar">
-                    <i class="fas fa-user"></i>
-                </div>
-                <h3 class="user-name">Hermona</h3>
-                <p class="user-role">Administrator</p>
-            </div>
-            
-            <ul class="nav-menu">
-                <li class="nav-item">
-                    <a href="#" class="nav-link active">
-                        <i class="fas fa-pen"></i>
-                        <span>Manage Thoughts</span>
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a href="index.html" class="nav-link">
-                        <i class="fas fa-home"></i>
-                        <span>Back to Site</span>
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a href="logout.php" class="nav-link logout-btn">
-                        <i class="fas fa-sign-out-alt"></i>
-                        <span>Logout</span>
-                    </a>
-                </li>
-            </ul>
-
-</div>
 
         <!-- Sidebar -->
         <aside class="sidebar">
