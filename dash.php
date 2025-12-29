@@ -19,14 +19,9 @@ header('X-XSS-Protection: 1; mode=block');
 header('Referrer-Policy: strict-origin-when-cross-origin');
 header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
 
-// Content Security Policy
-header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com/ajax/libs/; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com/ajax/libs/ https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:;");
+// Content Security Policy  
+header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; img-src 'self' data: https:;");
 
-// Error reporting (production mode)
-ini_set('display_errors', 0);
-ini_set('log_errors', 1);
-ini_set('error_log', __DIR__ . '/php_errors.log');
-error_reporting(E_ALL & ~E_DEPRECATED & ~E_STRICT);
 
 // // Check if user is logged in
 // if (!isset($_SESSION['user_id']) || !isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
@@ -736,151 +731,163 @@ try {
         }
 
         /* Responsive Design */
-        @media (max-width: 1024px) {
-            .dashboard-container {
-                grid-template-columns: 1fr;
-            }
-            
-            .sidebar {
-                position: fixed;
-                width: 100%;
-                height: auto;
-                z-index: 1000;
-                padding: 15px;
-                max-height: 100vh;
-                overflow-y: auto;
-            }
-            
-            .sidebar-header {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-bottom: 15px;
-            }
-            
-            .user-info {
-                display: block;
-                text-align: center;
-                margin-bottom: 20px;
-                padding-bottom: 15px;
-                border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-            }
-            
-            .user-avatar {
-                width: 60px;
-                height: 60px;
-                font-size: 1.5rem;
-            }
-            
-            .nav-menu {
-                display: flex;
-                flex-direction: column;
-                gap: 8px;
-            }
-            
-            .nav-link span {
-                display: inline !important;
-                font-size: 0.9rem;
-            }
-            
-            .main-content {
-                margin-top: 220px;
-                padding-top: 20px;
-            }
-        }
+/* Responsive Design */
+@media (max-width: 1024px) {
+    .dashboard-container {
+        grid-template-columns: 1fr; 
+    }
+    .sidebar{
+        display:none;
+    }
+    /* .sidebar {
+        position: fixed;
+        width: 100%;
+        height: auto;
+        z-index: 1000;
+        padding: 15px;
+        max-height: 100vh;
+        overflow-y: auto;
+    }
+    
+    .sidebar-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+        padding-bottom: 15px;
+        border-bottom: 1px solid rgba(201, 19, 19, 0.3);
+    }
+     */
+    .user-info {
+        display: block;
+        text-align: center;
+        margin-bottom: 20px;
+        padding-bottom: 15px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .user-avatar {
+        width: 60px;
+        height: 60px;
+        font-size: 1.5rem;
+    }
+    
+    .nav-menu {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .nav-link span {
+        display: inline !important;
+        font-size: 0.9rem;
+    }
+    
+  
+}
 
-        @media (max-width: 768px) {
-            .main-content {
-                padding: 20px 15px;
-            }
-            
-            .page-title {
-                font-size: 2rem;
-            }
-            
-            .thoughts-table {
-                display: block;
-                overflow-x: auto;
-                white-space: nowrap;
-            }
-            
-            .thoughts-table thead {
-                display: none;
-            }
-            
-            .thoughts-table tbody, 
-            .thoughts-table tr, 
-            .thoughts-table td {
-                display: block;
-                width: 100%;
-                white-space: normal;
-            }
-            
-            .thoughts-table tr {
-                margin-bottom: 20px;
-                background: rgba(30, 30, 30, 0.5);
-                border-radius: 10px;
-                padding: 15px;
-                border: 1px solid rgba(255, 255, 255, 0.05);
-            }
-            
-            .thoughts-table td {
-                padding: 10px 0;
-                border: none;
-                position: relative;
-                padding-left: 120px;
-            }
-            
-            .thoughts-table td:before {
-                content: attr(data-label);
-                position: absolute;
-                left: 15px;
-                top: 10px;
-                font-weight: 600;
-                color: var(--primary-red);
-                text-transform: uppercase;
-                font-size: 0.8rem;
-                letter-spacing: 1px;
-            }
-            
-            .thought-text {
-                max-width: 100%;
-                white-space: normal;
-                word-wrap: break-word;
-            }
-            
-            .table-actions {
-                justify-content: flex-start;
-                flex-wrap: wrap;
-            }
-            
-            .nav-link {
-                padding: 10px 12px;
-                font-size: 0.9rem;
-            }
-        }
+@media (max-width: 768px) {
+   #currentTime{
+    display:none; 
+   }
+    
+    .page-title {
+        font-size: 2rem;
+    }
+    
+    .thoughts-table {
+        display: block;
+        overflow-x: auto;
+        white-space: nowrap;
+    }
+    
+    .thoughts-table thead {
+        display: none;
+    }
+    
+    .thoughts-table tbody, 
+    .thoughts-table tr, 
+    .thoughts-table td {
+        display: block;
+        width: 100%;
+        white-space: normal;
+    }
+    
+    .thoughts-table tr {
+        margin-bottom: 20px;
+        background: rgba(30, 30, 30, 0.5);
+        border-radius: 10px;
+        padding: 15px;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    
+    .thoughts-table td {
+        padding: 10px 0;
+        border: none;
+        position: relative;
+        padding-left: 120px;
+    }
+    
+    .thoughts-table td:before {
+        content: attr(data-label);
+        position: absolute;
+        left: 15px;
+        top: 10px;
+        font-weight: 600;
+        color: var(--primary-red);
+        text-transform: uppercase;
+        font-size: 0.8rem;
+        letter-spacing: 1px;
+    }
+    
+    .thought-text {
+        max-width: 100%;
+        white-space: normal;
+        word-wrap: break-word;
+    }
+    
+    .table-actions {
+        justify-content: flex-start;
+        flex-wrap: wrap;
+    }
+    
+    .nav-link {
+        padding: 10px 12px;
+        font-size: 0.9rem;
+    }
+}
 
-        @media (max-width: 480px) {
-            .form-card,
-            .table-container {
-                padding: 20px;
-            }
-            
-            .dashboard-header {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 15px;
-            }
-            
-            .nav-menu {
-                flex-wrap: wrap;
-            }
-            
-            .table-actions {
-                flex-direction: column;
-            }
-        }
-
+@media (max-width: 480px) {
+    .form-card,
+    .table-container {
+        padding: 20px;
+    }
+    
+    .dashboard-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 15px;
+    }
+    
+    .page-title {
+        font-size: 1.8rem;
+    }
+    
+    .nav-menu {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+    
+    .nav-link {
+        padding: 8px 10px;
+        font-size: 0.85rem;
+    }
+    
+    .table-actions {
+        flex-direction: column;
+        gap: 5px;
+    }
+}
         /* Modal */
         .modal {
             display: none;
@@ -983,6 +990,8 @@ try {
             color: var(--primary-red);
             font-size: 0.9rem;
             margin-bottom: 15px;
+            font-weight:bold;
+            
             display: flex;
             align-items: center;
             gap: 8px;
@@ -1108,10 +1117,7 @@ try {
         
         /* Responsive fixes */
         @media (max-width: 1024px) {
-            .main-content {
-                margin-top: 220px;
-                padding-top: 20px;
-            }
+           
         }
         
         /* Make sure the form textarea doesn't overflow */
@@ -1172,13 +1178,7 @@ try {
             color: #ff6b6b !important;
         }
         
-        /* Character counter */
-        .char-counter {
-            text-align: right;
-            font-size: 0.8rem;
-            margin-top: 5px;
-            color: #666;
-        }
+         
         
         /* Textarea auto-resize */
         .auto-resize {
@@ -1199,10 +1199,43 @@ try {
         } 
     </style>
 </head>
-<body>
-    <a href="#main-content" class="skip-to-content sr-only sr-only-focusable">Skip to main content</a>
+<body> 
     
     <div class="dashboard-container">
+
+<div class="miniside" style="display:none;
+        flex-direction: row; ">
+    <div class="user-info">
+                <div class="user-avatar">
+                    <i class="fas fa-user"></i>
+                </div>
+                <h3 class="user-name">Hermona</h3>
+                <p class="user-role">Administrator</p>
+            </div>
+            
+            <ul class="nav-menu">
+                <li class="nav-item">
+                    <a href="#" class="nav-link active">
+                        <i class="fas fa-pen"></i>
+                        <span>Manage Thoughts</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="index.html" class="nav-link">
+                        <i class="fas fa-home"></i>
+                        <span>Back to Site</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="logout.php" class="nav-link logout-btn">
+                        <i class="fas fa-sign-out-alt"></i>
+                        <span>Logout</span>
+                    </a>
+                </li>
+            </ul>
+
+</div>
+
         <!-- Sidebar -->
         <aside class="sidebar">
             <div class="sidebar-header">
@@ -1215,7 +1248,7 @@ try {
                 <div class="user-avatar">
                     <i class="fas fa-user"></i>
                 </div>
-                <h3 class="user-name"><?php echo htmlspecialchars($_SESSION['username'] ?? 'Author', ENT_QUOTES, 'UTF-8'); ?></h3>
+                <h3 class="user-name">Hermona</h3>
                 <p class="user-role">Administrator</p>
             </div>
             
@@ -1279,12 +1312,8 @@ try {
                             name="thought_text" 
                             class="form-textarea auto-resize"  
                             placeholder="Share your writing insights, inspirations, or reflections..."
-                            required
-                            maxlength="1000"
-                            oninput="updateCharCounter(this, 'charCount'); autoResize(this); clearError('thoughtError');"></textarea> 
-                        <div class="char-counter">
-                            <span id="charCount">0</span> / 1000 characters
-                        </div>
+                            required  autoResize(this); clearError('thoughtError');"></textarea> 
+                      
                         <div id="thoughtError" class="validation-error" style="display: none;">
                             <i class="fas fa-exclamation-circle"></i>
                             <span></span>
@@ -1314,7 +1343,7 @@ try {
             </div>
             
             <!-- Existing Thoughts Table -->
-            <div class="table-container">
+            <div class="table-container" style="margin-top:20px;">
                 <div class="table-header">
                     <h2 class="table-title">Published Thoughts</h2>
                     <span class="btn btn-secondary">
@@ -1395,13 +1424,9 @@ try {
                         id="edit_text" 
                         name="edit_text" 
                         class="form-textarea auto-resize" 
-                        required 
-                        maxlength="1000"
-                        placeholder="Edit your thought..."
-                        oninput="updateCharCounter(this, 'editCharCount'); autoResize(this); clearError('editError');"></textarea>
-                    <div class="char-counter">
-                        <span id="editCharCount">0</span> / 1000 characters
-                    </div>
+                        required  
+                        placeholder="Edit your thought..."  autoResize(this); clearError('editError');"></textarea>
+                   
                     <div id="editError" class="validation-error" style="display: none;">
                         <i class="fas fa-exclamation-circle"></i>
                         <span></span>
@@ -1471,37 +1496,13 @@ try {
     updateTime();
     setInterval(updateTime, 1000);
     
-    // Character counter for thought text
-    function updateCharCounter(textarea, counterId) {
-        const counter = document.getElementById(counterId);
-        if (textarea && counter) {
-            const length = textarea.value.length;
-            counter.textContent = length;
-            
-            // Add warning color if approaching limit
-            if (length > 900) {
-                counter.classList.add('char-limit-danger');
-                counter.classList.remove('char-limit-warning');
-            } else if (length > 800) {
-                counter.classList.add('char-limit-warning');
-                counter.classList.remove('char-limit-danger');
-            } else {
-                counter.classList.remove('char-limit-warning', 'char-limit-danger');
-            }
-        }
-    }
+     
     
     // Initialize character counters on page load
     document.addEventListener('DOMContentLoaded', function() {
         const thoughtText = document.getElementById('thought_text');
         const editText = document.getElementById('edit_text');
-        
-        if (thoughtText) {
-            updateCharCounter(thoughtText, 'charCount');
-        }
-        if (editText) {
-            updateCharCounter(editText, 'editCharCount');
-        }
+       
         
         // Initialize textarea auto-resize
         document.querySelectorAll('.auto-resize').forEach(textarea => {
@@ -1557,64 +1558,27 @@ try {
             .substring(0, 1000);
     }
     
-    // Form validation
-    function validateForm(event) {
-        const textElement = document.getElementById('thought_text');
-        let text = textElement.value.trim();
-        const csrfToken = document.querySelector('input[name="csrf_token"]');
-        const errorDiv = document.getElementById('thoughtError');
-        const submitBtn = document.getElementById('submitBtn');
-        
-        // Set loading state
-        setLoading(submitBtn, true);
-        
-        // Clear previous errors
-        clearError('thoughtError');
-        
-        // Basic validation
-        if (!csrfToken || !csrfToken.value) {
-            showError('thoughtError', 'Security token missing. Please refresh the page.');
-            setLoading(submitBtn, false);
-            return false;
-        }
-        
-        if (!text) {
-            showError('thoughtError', 'Please enter your thought.');
-            textElement.focus();
-            setLoading(submitBtn, false);
-            return false;
-        }
-        
-        // Sanitize input
-        text = sanitizeInput(text);
-        textElement.value = text;
-        
-        if (text.length > 1000) {
-            showError('thoughtError', 'Thought must be 1000 characters or less.');
-            textElement.focus();
-            setLoading(submitBtn, false);
-            return false;
-        }
-        
-        // Check for excessive newlines (potential spam)
-        const newlineCount = (text.match(/\n/g) || []).length;
-        if (newlineCount > 50) {
-            showError('thoughtError', 'Too many line breaks. Please format your thought properly.');
-            textElement.focus();
-            setLoading(submitBtn, false);
-            return false;
-        }
-        
-        // Check for excessive whitespace
-        if (/\s{10,}/.test(text)) {
-            showError('thoughtError', 'Too many consecutive spaces detected.');
-            textElement.focus();
-            setLoading(submitBtn, false);
-            return false;
-        }
-        
-        return true;
-    }
+ // Form validation - SIMPLIFIED VERSION
+function validateForm(event) {
+    const textElement = document.getElementById('thought_text');
+    let text = textElement.value.trim();
+    const errorDiv = document.getElementById('thoughtError');
+    const submitBtn = document.getElementById('submitBtn');
+    
+    // Clear previous errors
+    clearError('thoughtError');
+    
+    // Debug: Log what's happening
+    console.log('Validating form, text:', text.substring(0, 50));
+    
+    // Basic validation
+    if (!text) {
+        showError('thoughtError', 'Please enter your thought.');
+        textElement.focus();
+        return false;
+    }  
+    return true;
+}
     
     // Validate edit form
     function validateEditForm(event) {
@@ -1633,13 +1597,7 @@ try {
             textElement.focus();
             return false;
         }
-        
-        if (text.length > 1000) {
-            showError('editError', 'Thought must be 1000 characters or less.');
-            textElement.focus();
-            return false;
-        }
-        
+         
         return true;
     }
     
@@ -1688,10 +1646,7 @@ try {
     
     // Reset form
     function resetForm() {
-        const thoughtText = document.getElementById('thought_text');
-        if (thoughtText) {
-            updateCharCounter(thoughtText, 'charCount');
-        }
+        const thoughtText = document.getElementById('thought_text'); 
         clearError('thoughtError');
         document.getElementById('previewSection').style.display = 'none';
     }
@@ -1757,8 +1712,7 @@ try {
         
         document.getElementById('edit_id').value = id;
         const editTextarea = document.getElementById('edit_text');
-        editTextarea.value = decodedText;
-        updateCharCounter(editTextarea, 'editCharCount');
+        editTextarea.value = decodedText; 
         
         // Show the modal
         const modal = document.getElementById('editModal');
