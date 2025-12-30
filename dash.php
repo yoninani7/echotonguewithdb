@@ -1162,8 +1162,9 @@ try {
         
         /* Validation styles */
         .validation-error {
-            color: #ff6b6b;
+            color: #d41d1dff;
             font-size: 0.8rem;
+            font-weight:bold;
             margin-top: 5px;
             display: flex;
             align-items: center;
