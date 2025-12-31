@@ -22,14 +22,7 @@ header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
 // Content Security Policy  
 header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; img-src 'self' data: https:;");
 
-
-// // Check if user is logged in
-// if (!isset($_SESSION['user_id']) || !isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
-//     header('Location: login.php');
-//     exit;
-// }
-
-// Initialize rate limiting
+// Rate limiting
 if (!isset($_SESSION['last_request'])) {
     $_SESSION['last_request'] = time();
     $_SESSION['request_count'] = 0;
@@ -37,14 +30,12 @@ if (!isset($_SESSION['last_request'])) {
 
 $current_time = time();
 if ($current_time - $_SESSION['last_request'] > 60) {
-    // Reset counter if more than a minute has passed
     $_SESSION['request_count'] = 0;
     $_SESSION['last_request'] = $current_time;
 }
 
 $_SESSION['request_count']++;
 if ($_SESSION['request_count'] > 30) {
-    // Rate limit exceeded
     header('HTTP/1.1 429 Too Many Requests');
     die('Rate limit exceeded. Please wait and try again.');
 }
@@ -77,9 +68,18 @@ function validateThoughtText($text) {
     $text = trim($text);
     if (empty($text)) {
         return false;
-    }  
-    // Basic XSS protection but don't store encoded
+    }
+    
+    // Check length
+    if (strlen($text) > 1000) {
+        return false;
+    }
+    
+    // Basic XSS protection
     $text = strip_tags($text);
+    
+    // Remove any null bytes
+    $text = str_replace("\0", '', $text);
     
     return $text;
 }
@@ -108,7 +108,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         $stmt->bind_param("s", $thought_text);
                         
                         if ($stmt->execute()) {
-                            // Regenerate CSRF token after successful operation
                             $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
                             $_SESSION['success_message'] = "Thought added successfully!";
                             $stmt->close();
@@ -149,7 +148,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         $stmt->bind_param("si", $thought_text, $id);
                         
                         if ($stmt->execute()) {
-                            // Regenerate CSRF token after successful operation
                             $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
                             $_SESSION['success_message'] = "Thought updated successfully!";
                             $stmt->close();
@@ -255,7 +253,6 @@ try {
     <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Montserrat:wght@300;400;500;600&family=Orbitron:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
-        /* Import the existing theme variables */
         :root {
             --primary-red: #c91313c9;
             --dark-red: #b30000;
@@ -293,7 +290,6 @@ try {
             position: relative;
         }
 
-        /* Skip to content link */
         .skip-to-content {
             position: absolute;
             top: -40px;
@@ -309,14 +305,12 @@ try {
             top: 0;
         }
 
-        /* Dashboard Container */
         .dashboard-container {
             display: grid;
             grid-template-columns: 250px 1fr;
             min-height: 100vh;
         }
 
-        /* Sidebar */
         .sidebar {
             background: rgba(15, 15, 15, 0.95);
             border-right: 1px solid rgba(255, 255, 255, 0.1);
@@ -426,7 +420,6 @@ try {
             background: rgba(201, 19, 19, 0.3);
         }
 
-        /* Main Content */
         .main-content {
             padding: 30px;
             overflow-y: auto;
@@ -455,7 +448,6 @@ try {
             margin-top: 5px;
         }
 
-        /* Messages */
         .message {
             padding: 15px 20px;
             border-radius: 8px;
@@ -501,7 +493,6 @@ try {
             opacity: 1;
         }
 
-        /* Form Card */
         .form-card {
             background: rgba(20, 20, 20, 0.8);
             border-radius: 15px;
@@ -568,7 +559,6 @@ try {
             outline-offset: 2px;
         }
 
-        /* Button Styles */
         .btn {
             padding: 12px 25px;
             background: radial-gradient(100% 120% at 50% 0%, #df0211 0%, #500D11 100%);
@@ -624,7 +614,6 @@ try {
             font-size: 12px;
         }
 
-        /* Thoughts Table */
         .table-container {
             background: rgba(20, 20, 20, 0.8);
             border-radius: 15px;
@@ -698,161 +687,81 @@ try {
             color: rgba(255, 255, 255, 0.1);
         }
 
-        /* Responsive Design */
-/* Responsive Design */
-@media (max-width: 1024px) {
-    .dashboard-container {
-        grid-template-columns: 1fr; 
-    }
-    .sidebar{
-        display:none;
-    }
-    .miniside{
-        display:block;
-    } 
-    body {
-        padding-top: 70px;
-    }
-    /* .sidebar {
-        position: fixed;
-        width: 100%;
-        height: auto;
-        z-index: 1000;
-        padding: 15px;
-        max-height: 100vh;
-        overflow-y: auto;
-    }
-    
-    .sidebar-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 15px;
-        padding-bottom: 15px;
-        border-bottom: 1px solid rgba(201, 19, 19, 0.3);
-    }
-     */
-    .user-info {
-        display: block;
-        text-align: center;
-        margin-bottom: 20px;
-        padding-bottom: 15px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    }
-    
-    .user-avatar {
-        width: 60px;
-        height: 60px;
-        font-size: 1.5rem;
-    }
-    
-    .nav-menu {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-    }
-    
-    .nav-link span {
-        display: inline !important;
-        font-size: 0.9rem;
-    }
-    
-  
-}
+        @media (max-width: 768px) {
+            .dashboard-container {
+                grid-template-columns: 1fr;
+            }
+            
+            .sidebar {
+                display: none;
+            }
+            
+            .main-content {
+                padding: 20px;
+                padding-top: 80px;
+            }
+            
+            .page-title {
+                font-size: 2rem;
+            }
+            
+            .form-card,
+            .table-container {
+                padding: 20px;
+            }
+            
+            .thoughts-table {
+                display: block;
+                overflow-x: auto;
+            }
+            
+            .thoughts-table thead {
+                display: none;
+            }
+            
+            .thoughts-table tbody, 
+            .thoughts-table tr, 
+            .thoughts-table td {
+                display: block;
+                width: 100%;
+            }
+            
+            .thoughts-table tr {
+                margin-bottom: 20px;
+                background: rgba(30, 30, 30, 0.5);
+                border-radius: 10px;
+                padding: 15px;
+            }
+            
+            .thoughts-table td {
+                padding: 10px 0;
+                border: none;
+                position: relative;
+                padding-left: 120px;
+            }
+            
+            .thoughts-table td:before {
+                content: attr(data-label);
+                position: absolute;
+                left: 15px;
+                top: 10px;
+                font-weight: 600;
+                color: var(--primary-red);
+                text-transform: uppercase;
+                font-size: 0.8rem;
+                letter-spacing: 1px;
+            }
+            
+            .table-actions {
+                flex-direction: column;
+            }
+            
+            .btn {
+                width: 100%;
+                justify-content: center;
+            }
+        }
 
-@media (max-width: 768px) {
-   #currentTime{
-    display:none; 
-   } 
-    .page-title {
-        font-size: 2rem;
-    } 
-    .thoughts-table {
-        display: block;
-        overflow-x: auto;
-        white-space: nowrap;
-    } 
-    .thoughts-table thead {
-        display: none;
-    } 
-    .thoughts-table tbody, 
-    .thoughts-table tr, 
-    .thoughts-table td {
-        display: block;
-        width: 100%;
-        white-space: normal;
-    } 
-    .thoughts-table tr {
-        margin-bottom: 20px;
-        background: rgba(30, 30, 30, 0.5);
-        border-radius: 10px;
-        padding: 15px;
-        border: 1px solid rgba(255, 255, 255, 0.05);
-    } 
-    .thoughts-table td {
-        padding: 10px 0;
-        border: none;
-        position: relative;
-        padding-left: 120px;
-    } 
-    .thoughts-table td:before {
-        content: attr(data-label);
-        position: absolute;
-        left: 15px;
-        top: 10px;
-        font-weight: 600;
-        color: var(--primary-red);
-        text-transform: uppercase;
-        font-size: 0.8rem;
-        letter-spacing: 1px;
-    } 
-    .thought-text {
-        max-width: 100%;
-        white-space: normal;
-        word-wrap: break-word;
-    } 
-    .table-actions {
-        justify-content: flex-start;
-        flex-wrap: wrap;
-    } 
-    .nav-link {
-        padding: 10px 12px;
-        font-size: 0.9rem;
-    }
-}
-
-@media (max-width: 480px) {
-    .form-card,
-    .table-container {
-        padding: 20px;
-    }
-    
-    .dashboard-header {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 15px;
-    }
-    
-    .page-title {
-        font-size: 1.8rem;
-    }
-    
-    .nav-menu {
-        flex-wrap: wrap;
-        justify-content: center;
-    }
-    
-    .nav-link {
-        padding: 8px 10px;
-        font-size: 0.85rem;
-    }
-    
-    .table-actions {
-        flex-direction: column;
-        gap: 5px;
-    }
-}
-        /* Modal */
         .modal {
             display: none;
             position: fixed;
@@ -929,7 +838,6 @@ try {
             margin-top: 30px;
         }
 
-        /* Preview Section */
         .preview-section {
             margin-top: 40px;
             padding-top: 40px;
@@ -955,7 +863,6 @@ try {
             font-size: 0.9rem;
             margin-bottom: 15px;
             font-weight:bold;
-            
             display: flex;
             align-items: center;
             gap: 8px;
@@ -967,7 +874,6 @@ try {
             word-wrap: break-word;
         }
 
-        /* Loading Animation */
         .loading {
             display: inline-block;
             width: 20px;
@@ -1001,7 +907,6 @@ try {
             to { transform: rotate(360deg); }
         }
         
-        /* Current time */
         .current-time {
             background: rgba(20, 20, 20, 0.8);
             padding: 10px 20px;
@@ -1019,19 +924,12 @@ try {
             margin-right: 8px;
         }
         
-        /* Fix for the logo */
-        .logo span {
-            color: white;
-        }
-        
-        /* Add style for action buttons container */
         .action-buttons {
             display: flex;
             gap: 10px;
             margin-top: 15px;
         }
         
-        /* Confirmation modal styles */
         .confirmation-modal {
             position: fixed;
             top: 0;
@@ -1079,18 +977,10 @@ try {
             margin-top: 30px;
         }
         
-        /* Responsive fixes */  
-        .form-textarea {
-            max-width: 100%;
-            min-height: 150px;
-        }
-        
-        /* Add smooth scrolling */
         html {
             scroll-behavior: smooth;
         }
         
-        /* Animation classes */
         @keyframes slideIn {
             from { 
                 opacity: 0; 
@@ -1102,23 +992,6 @@ try {
             }
         }
         
-        @keyframes fadeOut {
-            from { 
-                opacity: 1; 
-                transform: translateY(0); 
-            }
-            to { 
-                opacity: 0; 
-                transform: translateY(-10px); 
-                max-height: 0;
-                margin-bottom: 0;
-                padding-top: 0;
-                padding-bottom: 0;
-                overflow: hidden;
-            }
-        }
-        
-        /* Validation styles */
         .validation-error {
             color: #d41d1dff;
             font-size: 0.8rem;
@@ -1130,22 +1003,6 @@ try {
             animation: slideIn 0.3s ease;
         }
         
-        .char-limit-warning {
-            color: #ffa726 !important;
-        }
-        
-        .char-limit-danger {
-            color: #ff6b6b !important;
-        }
-        
-         
-        
-        /* Textarea auto-resize */
-        .auto-resize {
-            transition: height 0.2s ease;
-        }
-        
-        /* Accessibility improvements */
         .sr-only {
             position: absolute;
             width: 1px;
@@ -1156,183 +1013,124 @@ try {
             clip: rect(0, 0, 0, 0);
             white-space: nowrap;
             border: 0;
-        } 
-/* Main Header Container */
-.miniside { 
-    display: flex;
-    align-items: center;
-    justify-content: space-between; 
-    background-color: rgba(20, 18, 18, 0.95); /* Deep dark with slight transparency */
-    backdrop-filter: blur(8px); /* Blur effect for modern browsers */
-    color: #ffffff;
-    height: 70px; 
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    z-index: 9999;
-    box-sizing: border-box;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-/* User Profile Section */
-.user-infoa {
-    display: flex;
-    align-items: center;
-    gap: 15px;
-    margin-top:10px;
-}
-
-.user-avatar i {
-    font-size: 28px; 
-    width: 62px;
-    height: 62px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 100%;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: #ffffffff;
-}
-
-.user-text h3 {
-    margin: 0;
-    font-size: 20px;
-    font-weight: 700;
-    letter-spacing: 0.3px;
-}
-
-.user-role {
-    margin: 0;
-    font-size: 10px;
-    text-transform: uppercase;
-    font-weight: 500;
-    color: #e2e2e2ff; /* Accent Color */
-    letter-spacing: 1px;
-}
-
-/* Navigation Menu */
-.nav-menua {
-    display: flex;
-    list-style: none;
-    margin-top: 10px;
-    padding: 0;
-    gap: 8px;
-}
-
-.nav-linka {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    text-decoration: none;
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 14px;
-    font-weight: 500;
-    padding: 10px 16px;
-    border-radius: 8px;
-    transition: all 0.3s ease;
-}
-
-/* Interaction States */
-.nav-linka:hover {
-    color: #ffffff;
-    background: rgba(255, 255, 255, 0.08);
-    transform: translateY(-1px);
-}
-
-.nav-linka.active {
-    background: radial-gradient(100% 120% at 50% 0%, #df0211 0%, #500D11 100%);
+        }
+        
+        .mobile-header {
+            display: none;
+            background: rgba(20, 18, 18, 0.95);
+            backdrop-filter: blur(8px);
+            color: #ffffff;
+            height: 70px;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            z-index: 9999;
+            padding: 0 20px;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        
+        .mobile-logo {
+            font-family: 'Cinzel Decorative', serif;
+            font-weight: 700;
+            font-size: 20px;
+            color: white;
+            text-decoration: none;
+        }
+        
+        .mobile-menu-btn {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 10px;
+        }
+        
+        .mobile-nav {
+            position: fixed;
+            top: 70px;
+            left: 0;
+            width: 100%;
+            background: rgba(15, 15, 15, 0.98);
+            backdrop-filter: blur(10px);
+            z-index: 9998;
+            display: none;
+            padding: 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .mobile-nav.show {
+            display: block;
+        }
+        
+        .mobile-nav .nav-menu {
+            flex-direction: column;
+        }
+        
+        .mobile-nav .nav-item {
+            margin-bottom: 10px;
+        }
+        
+        .mobile-nav .nav-link {
+            padding: 15px;
+            border-radius: 8px;
+        }
+        
+        @media (max-width: 768px) {
+            .mobile-header {
+                display: flex;
+            }
             
-    color: #ffffff;
-    box-shadow: 0 4px 15px rgba(226, 74, 74, 0.3);
-}
-
-.nav-linka.logout-btn:hover {
-    background: rgba(231, 76, 60, 0.2);
-    color: #ff6b6b;
-}
-
-/* --- Responsive Adjustments --- */
-
-/* For Tablets (Max 992px) */
-@media (max-width: 992px) {
-    .miniside {
-        padding: 0 20px;
-    }
-    .nav-linka {
-        padding: 10px 12px;
-    }
-}
-
-    /* For Mobile (Max 768px) */
-    @media (max-width: 768px) { 
-        .nav-menua {
-            gap: 5px;
+            .current-time {
+                display: none;
+            }
         }
-    }
-
-    .hid{
-    display:none;
- 
-    }
-    @media (max-width: 1024px) {
-    .hid{
-    display:block;
-    }
-    }
-    @media (max-width: 650px) {
-    .user-text {
-            display: none; /* Hide name/role on mobile to save space */
+        
+        @media (min-width: 769px) {
+            .mobile-header {
+                display: none;
+            }
         }
-    }
-    @media (max-width: 534px) { 
-        .nav-linka span{
-            display:none;
-        }
-    }
     </style>
 </head>
-<body> 
-    <div class="hid">
-<div class="miniside">
-    <div class="user-infoa">
-        <div class="user-avatar">
-            <i class="fas fa-user"></i>
-        </div>
-        <div class="user-text">
-            <h3 class="user-name">Hermona</h3>
-            <p class="user-role">Administrator</p>
-        </div>
+<body>
+    <!-- Mobile Header -->
+    <div class="mobile-header">
+        <a href="index.html" class="mobile-logo">ECHOTONGUE</a>
+        <button class="mobile-menu-btn" onclick="toggleMobileMenu()">
+            <i class="fas fa-bars"></i>
+        </button>
     </div>
-
-    <ul class="nav-menua">
-        <li class="nav-item">
-            <a href="#" class="nav-linka active">
-                <i class="fas fa-pen"></i>
-                <span>Manage Thoughts</span>
-            </a>
-        </li>
-        <li class="nav-item">
-            <a href="index.html" class="nav-linka">
-                <i class="fas fa-home"></i>
-                <span>Back to Site</span>
-            </a>
-        </li>
-        <li class="nav-item">
-            <a href="logout.php" class="nav-linka">
-                <i class="fas fa-sign-out-alt"></i>
-                <span>Logout</span>
-            </a>
-        </li>
-    </ul>
-</div>
+    
+    <div class="mobile-nav" id="mobileNav">
+        <ul class="nav-menu">
+            <li class="nav-item">
+                <a href="#" class="nav-link active" onclick="closeMobileMenu()">
+                    <i class="fas fa-pen"></i>
+                    <span>Manage Thoughts</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="index.html" class="nav-link" onclick="closeMobileMenu()">
+                    <i class="fas fa-home"></i>
+                    <span>Back to Site</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="logout.php" class="nav-link logout-btn" onclick="closeMobileMenu()">
+                    <i class="fas fa-sign-out-alt"></i>
+                    <span>Logout</span>
+                </a>
+            </li>
+        </ul>
     </div>
    
     <div class="dashboard-container">
-
-
-        <!-- Sidebar -->
+        <!-- Desktop Sidebar -->
         <aside class="sidebar">
             <div class="sidebar-header">
                 <a href="index.html" class="logo">  
@@ -1382,7 +1180,6 @@ try {
                     <h1 class="page-title">Author's Dashboard</h1>
                     <p class="page-subtitle">Manage your writing journey and share insights with readers</p>
                 </div>
-                
             </div>
             
             <?php if ($message): ?>
@@ -1408,7 +1205,8 @@ try {
                             name="thought_text" 
                             class="form-textarea auto-resize"  
                             placeholder="Share your writing insights, inspirations, or reflections..."
-                            required  autoResize(this); clearError('thoughtError');"></textarea> 
+                            required
+                            oninput="autoResize(this); clearError('thoughtError');"></textarea> 
                       
                         <div id="thoughtError" class="validation-error" style="display: none;">
                             <i class="fas fa-exclamation-circle"></i>
@@ -1521,7 +1319,8 @@ try {
                         name="edit_text" 
                         class="form-textarea auto-resize" 
                         required  
-                        placeholder="Edit your thought..."  autoResize(this); clearError('editError');"></textarea>
+                        placeholder="Edit your thought..."
+                        oninput="autoResize(this); clearError('editError');"></textarea>
                    
                     <div id="editError" class="validation-error" style="display: none;">
                         <i class="fas fa-exclamation-circle"></i>
@@ -1592,59 +1391,16 @@ try {
     updateTime();
     setInterval(updateTime, 1000);
     
-     
+    // Mobile menu functions
+    function toggleMobileMenu() {
+        const mobileNav = document.getElementById('mobileNav');
+        mobileNav.classList.toggle('show');
+    }
     
-    // Initialize character counters on page load
-    document.addEventListener('DOMContentLoaded', function() {
-        const thoughtText = document.getElementById('thought_text');
-        const editText = document.getElementById('edit_text');
-       
-        
-        // Initialize textarea auto-resize
-        document.querySelectorAll('.auto-resize').forEach(textarea => {
-            autoResize(textarea);
-        });
-        
-        // Auto-close success messages after 5 seconds
-        const successMessages = document.querySelectorAll('.message.success');
-        successMessages.forEach(message => {
-            setTimeout(() => {
-                const closeBtn = message.querySelector('.message-close');
-                if (closeBtn) closeMessage(closeBtn);
-            }, 5000);
-        });
-        
-        // Auto-close error messages after 8 seconds
-        const errorMessages = document.querySelectorAll('.message.error');
-        errorMessages.forEach(message => {
-            setTimeout(() => {
-                const closeBtn = message.querySelector('.message-close');
-                if (closeBtn) closeMessage(closeBtn);
-            }, 8000);
-        });
-        
-        // Setup delete confirmation
-        const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
-        if (confirmDeleteBtn) {
-            confirmDeleteBtn.addEventListener('click', function() {
-                if (deleteFormToSubmit) {
-                    deleteFormToSubmit.submit();
-                }
-            });
-        }
-        
-        // Add form validation
-        const forms = document.querySelectorAll('form');
-        forms.forEach(form => {
-            form.addEventListener('submit', function(e) {
-                if (!this.checkValidity()) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                }
-                this.classList.add('was-validated');
-            });
-        });
-    });
+    function closeMobileMenu() {
+        const mobileNav = document.getElementById('mobileNav');
+        mobileNav.classList.remove('show');
+    }
     
     // Input sanitization
     function sanitizeInput(text) {
@@ -1654,27 +1410,35 @@ try {
             .substring(0, 1000);
     }
     
- // Form validation - SIMPLIFIED VERSION
-function validateForm(event) {
-    const textElement = document.getElementById('thought_text');
-    let text = textElement.value.trim();
-    const errorDiv = document.getElementById('thoughtError');
-    const submitBtn = document.getElementById('submitBtn');
-    
-    // Clear previous errors
-    clearError('thoughtError');
-    
-    // Debug: Log what's happening
-    console.log('Validating form, text:', text.substring(0, 50));
-    
-    // Basic validation
-    if (!text) {
-        showError('thoughtError', 'Please enter your thought.');
-        textElement.focus();
-        return false;
-    }  
-    return true;
-}
+    // Form validation
+    function validateForm(event) {
+        const textElement = document.getElementById('thought_text');
+        let text = textElement.value.trim();
+        const errorDiv = document.getElementById('thoughtError');
+        const submitBtn = document.getElementById('submitBtn');
+        
+        // Clear previous errors
+        clearError('thoughtError');
+        
+        // Basic validation
+        if (!text) {
+            showError('thoughtError', 'Please enter your thought.');
+            textElement.focus();
+            return false;
+        }
+        
+        if (text.length > 1000) {
+            showError('thoughtError', 'Thought must be 1000 characters or less.');
+            textElement.focus();
+            return false;
+        }
+        
+        // Sanitize input
+        text = sanitizeInput(text);
+        textElement.value = text;
+        
+        return true;
+    }
     
     // Validate edit form
     function validateEditForm(event) {
@@ -1690,6 +1454,12 @@ function validateForm(event) {
         
         if (!text) {
             showError('editError', 'Please enter your thought.');
+            textElement.focus();
+            return false;
+        }
+        
+        if (text.length > 1000) {
+            showError('editError', 'Thought must be 1000 characters or less.');
             textElement.focus();
             return false;
         }
@@ -1850,11 +1620,6 @@ function validateForm(event) {
         // Reset form after animation
         setTimeout(() => {
             document.getElementById('editForm').reset();
-            const editCharCount = document.getElementById('editCharCount');
-            if (editCharCount) {
-                editCharCount.textContent = '0';
-                editCharCount.classList.remove('char-limit-warning', 'char-limit-danger');
-            }
             clearError('editError');
         }, 300);
     }
@@ -1912,77 +1677,83 @@ function validateForm(event) {
         }
     }
     
-    // Keyboard shortcuts
-    document.addEventListener('keydown', function(e) {
-        // Ctrl + Enter to submit main form
-        if (e.ctrlKey && e.key === 'Enter' && !document.getElementById('editModal').classList.contains('show')) {
-            const thoughtForm = document.getElementById('thoughtForm');
-            if (thoughtForm) {
-                const submitBtn = thoughtForm.querySelector('button[type="submit"]');
-                if (submitBtn) {
-                    submitBtn.click();
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize textarea auto-resize
+        document.querySelectorAll('.auto-resize').forEach(textarea => {
+            autoResize(textarea);
+        });
+        
+        // Auto-close success messages after 5 seconds
+        const successMessages = document.querySelectorAll('.message.success');
+        successMessages.forEach(message => {
+            setTimeout(() => {
+                const closeBtn = message.querySelector('.message-close');
+                if (closeBtn) closeMessage(closeBtn);
+            }, 5000);
+        });
+        
+        // Auto-close error messages after 8 seconds
+        const errorMessages = document.querySelectorAll('.message.error');
+        errorMessages.forEach(message => {
+            setTimeout(() => {
+                const closeBtn = message.querySelector('.message-close');
+                if (closeBtn) closeMessage(closeBtn);
+            }, 8000);
+        });
+        
+        // Setup delete confirmation
+        const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
+        if (confirmDeleteBtn) {
+            confirmDeleteBtn.addEventListener('click', function() {
+                if (deleteFormToSubmit) {
+                    deleteFormToSubmit.submit();
+                }
+            });
+        }
+        
+        // Keyboard shortcuts
+        document.addEventListener('keydown', function(e) {
+            // Ctrl + Enter to submit main form
+            if (e.ctrlKey && e.key === 'Enter' && !document.getElementById('editModal').classList.contains('show')) {
+                const thoughtForm = document.getElementById('thoughtForm');
+                if (thoughtForm) {
+                    const submitBtn = thoughtForm.querySelector('button[type="submit"]');
+                    if (submitBtn) {
+                        submitBtn.click();
+                    }
                 }
             }
-        }
-        
-        // Escape to close modal and messages
-        if (e.key === 'Escape') {
-            closeModal();
-            closeConfirmationModal();
-        }
-    });
-    
-    // Close modal when clicking outside
-    window.addEventListener('click', function(event) {
-        const editModal = document.getElementById('editModal');
-        const confirmationModal = document.getElementById('confirmationModal');
-        
-        if (event.target === editModal && editModal.classList.contains('show')) {
-            closeModal();
-        }
-        if (event.target === confirmationModal && confirmationModal.classList.contains('show')) {
-            closeConfirmationModal();
-        }
-    });
-    
-    // Prevent form resubmission on page refresh
-    if (window.history.replaceState) {
-        window.history.replaceState(null, null, window.location.href);
-    }
-    
-    // Store message state in sessionStorage to prevent showing again if page is refreshed
-    window.addEventListener('beforeunload', function() {
-        const messages = document.querySelectorAll('.message');
-        messages.forEach(message => {
-            const messageText = message.querySelector('span')?.textContent;
-            if (messageText) {
-                sessionStorage.setItem('lastMessage', messageText);
-                sessionStorage.setItem('lastMessageTime', Date.now());
+            
+            // Escape to close modal and messages
+            if (e.key === 'Escape') {
+                closeModal();
+                closeConfirmationModal();
+                closeMobileMenu();
             }
         });
-    });
-    
-    // Check if same message was shown recently
-    window.addEventListener('load', function() {
-        const lastMessage = sessionStorage.getItem('lastMessage');
-        const lastMessageTime = sessionStorage.getItem('lastMessageTime');
-        const currentTime = Date.now();
         
-        if (lastMessage && lastMessageTime && (currentTime - lastMessageTime) < 3000) {
-            // Same message was shown within 3 seconds, hide it faster
-            const currentMessage = document.querySelector('.message span');
-            if (currentMessage && currentMessage.textContent === lastMessage) {
-                const message = currentMessage.closest('.message');
-                setTimeout(() => {
-                    const closeBtn = message.querySelector('.message-close');
-                    if (closeBtn) closeMessage(closeBtn);
-                }, 1000);
+        // Close modal when clicking outside
+        window.addEventListener('click', function(event) {
+            const editModal = document.getElementById('editModal');
+            const confirmationModal = document.getElementById('confirmationModal');
+            const mobileNav = document.getElementById('mobileNav');
+            
+            if (event.target === editModal && editModal.classList.contains('show')) {
+                closeModal();
             }
-        }
+            if (event.target === confirmationModal && confirmationModal.classList.contains('show')) {
+                closeConfirmationModal();
+            }
+            if (mobileNav.classList.contains('show') && !event.target.closest('.mobile-nav') && !event.target.closest('.mobile-menu-btn')) {
+                closeMobileMenu();
+            }
+        });
         
-        // Clear stored message after checking
-        sessionStorage.removeItem('lastMessage');
-        sessionStorage.removeItem('lastMessageTime');
+        // Prevent form resubmission on page refresh
+        if (window.history.replaceState) {
+            window.history.replaceState(null, null, window.location.href);
+        }
     });
     </script>
 </body>
