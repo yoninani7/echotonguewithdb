@@ -77,39 +77,7 @@ function validateThoughtText($text) {
     $text = trim($text);
     if (empty($text)) {
         return false;
-    }
-    
-    // Check length
-    if (strlen($text) > 1000) {
-        return false;
-    }
-    
-    // Check for excessive newlines (potential spam)
-    $newline_count = substr_count($text, "\n");
-    if ($newline_count > 50) {
-        return false;
-    }
-    
-    // Check for excessive whitespace (potential spam)
-    if (preg_match('/\s{10,}/', $text)) {
-        return false;
-    }
-    
-    // Check for suspicious patterns (basic spam detection)
-    $suspicious_patterns = [
-        '/\[url.*?\]/i',
-        '/\[link.*?\]/i',
-        '/http[s]?:\/\/\S+/i',
-        '/\b(viagra|cialis|casino|porn)\b/i',
-    ];
-    
-    foreach ($suspicious_patterns as $pattern) {
-        if (preg_match($pattern, $text)) {
-            error_log("Suspicious content detected: " . substr($text, 0, 100));
-            return false;
-        }
-    }
-    
+    }  
     // Basic XSS protection but don't store encoded
     $text = strip_tags($text);
     
@@ -795,45 +763,38 @@ try {
 @media (max-width: 768px) {
    #currentTime{
     display:none; 
-   }
-    
+   } 
     .page-title {
         font-size: 2rem;
-    }
-    
+    } 
     .thoughts-table {
         display: block;
         overflow-x: auto;
         white-space: nowrap;
-    }
-    
+    } 
     .thoughts-table thead {
         display: none;
-    }
-    
+    } 
     .thoughts-table tbody, 
     .thoughts-table tr, 
     .thoughts-table td {
         display: block;
         width: 100%;
         white-space: normal;
-    }
-    
+    } 
     .thoughts-table tr {
         margin-bottom: 20px;
         background: rgba(30, 30, 30, 0.5);
         border-radius: 10px;
         padding: 15px;
         border: 1px solid rgba(255, 255, 255, 0.05);
-    }
-    
+    } 
     .thoughts-table td {
         padding: 10px 0;
         border: none;
         position: relative;
         padding-left: 120px;
-    }
-    
+    } 
     .thoughts-table td:before {
         content: attr(data-label);
         position: absolute;
@@ -844,19 +805,16 @@ try {
         text-transform: uppercase;
         font-size: 0.8rem;
         letter-spacing: 1px;
-    }
-    
+    } 
     .thought-text {
         max-width: 100%;
         white-space: normal;
         word-wrap: break-word;
-    }
-    
+    } 
     .table-actions {
         justify-content: flex-start;
         flex-wrap: wrap;
-    }
-    
+    } 
     .nav-link {
         padding: 10px 12px;
         font-size: 0.9rem;
@@ -1227,10 +1185,9 @@ try {
 }
 
 .user-avatar i {
-    font-size: 18px;
-    background: linear-gradient(135deg, #4a4a58, #2a2a35);
-    width: 42px;
-    height: 42px;
+    font-size: 28px; 
+    width: 62px;
+    height: 62px;
     display: flex;
     align-items: center;
     justify-content: center;
