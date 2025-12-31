@@ -1,3 +1,30 @@
+<?php
+session_start();
+
+// --- BACKEND LOGIC ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    header('Content-Type: application/json');
+    
+    // In a real app, connect to your DB here
+    // $pdo = new PDO("mysql:host=localhost;dbname=mydb", "user", "pass");
+
+    $username = $_POST['username'] ?? '';
+    $password = $_POST['password'] ?? '';
+
+    // MOCK VALIDATION (Replace this with database verification) 
+    if ($username == 'admin' && $password =='password123') {
+        
+        $_SESSION['user_id'] = 1; 
+        $_SESSION['logged_in'] = true;
+        session_regenerate_id(true); // Security: Prevents session hijacking
+
+        echo json_encode(['success' => true]);
+    } else {
+        echo json_encode(['success' => false, 'message' => 'Invalid username or password.']);
+    }
+    exit; // Stop execution so HTML isn't sent during a POST request
+}
+?>
 <!DOCTYPE html>
 <html lang="en">
 
@@ -771,37 +798,40 @@
         });
 
         // Form submission
-        const loginForm = document.getElementById('loginForm');
+      const loginForm = document.getElementById('loginForm');
         const errorAlert = document.getElementById('errorAlert');
         const successAlert = document.getElementById('successAlert');
 
-        loginForm.addEventListener('submit', (e) => {
+        loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
 
-            const username = document.getElementById('username').value;
-            const password = document.getElementById('password').value;
+            // Use FormData to grab all input values automatically
+            const formData = new FormData(loginForm);
 
-            // For demo purposes, accept any non-empty credentials
-            // In a real application, this would be a server-side validation
-            if (username && password) {
-                // Show success message
-                errorAlert.style.display = 'none';
-                successAlert.style.display = 'block';
+            try {
+                // We fetch from the SAME file (login.php)
+                const response = await fetch('login.php', {
+                    method: 'POST',
+                    body: formData
+                });
 
-                // Simulate API call delay
-                setTimeout(() => {
-                    // Redirect to dashboard or homepage
-                    window.location.href = 'index.html';
-                }, 1500);
-            } else {
-                // Show error message
-                successAlert.style.display = 'none';
-                errorAlert.style.display = 'block';
+                const result = await response.json();
 
-                // Hide error after 5 seconds
-                setTimeout(() => {
+                if (result.success) {
                     errorAlert.style.display = 'none';
-                }, 5000);
+                    successAlert.style.display = 'block';
+                    
+                    setTimeout(() => {
+                        window.location.href = 'dash.php';
+                    }, 1500);
+                } else {
+                    successAlert.style.display = 'none';
+                    errorAlert.textContent = result.message;
+                    errorAlert.style.display = 'block';
+                }
+            } catch (error) {
+                errorAlert.textContent = "A server error occurred.";
+                errorAlert.style.display = 'block';
             }
         });
 
