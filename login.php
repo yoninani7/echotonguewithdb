@@ -1,30 +1,178 @@
 <?php
+// Start session with security settings
+session_set_cookie_params([
+    'lifetime' => 3600,
+    'path' => '/',
+    'domain' => '',
+    'secure' => isset($_SERVER['HTTPS']),
+    'httponly' => true,
+    'samesite' => 'Strict'
+]);
+
 session_start();
+
+// Security headers - IMPORTANT: Add these at the beginning
+header('X-Frame-Options: DENY');
+header('X-Content-Type-Options: nosniff');
+header('X-XSS-Protection: 1; mode=block');
+header('Referrer-Policy: strict-origin-when-cross-origin');
+
+// Rate limiting for login attempts
+if (!isset($_SESSION['login_attempts'])) {
+    $_SESSION['login_attempts'] = 0;
+    $_SESSION['last_login_attempt'] = time();
+}
+
+// Check if user is already logged in
+if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) {
+    header('Location: dashboard.php');
+    exit();
+}
+
+// Database connection function
+function getDBConnection() {
+    static $conn = null;
+    if ($conn === null) {
+        $host = 'localhost';
+        $username = 'root';
+        $password = '';
+        $database = 'echotongue';
+        
+        try {
+            $conn = new mysqli($host, $username, $password, $database);
+            if ($conn->connect_error) {
+                throw new Exception("Database connection failed");
+            }
+            $conn->set_charset("utf8mb4");
+            $conn->query("SET SESSION sql_mode = 'STRICT_ALL_TABLES'");
+        } catch (Exception $e) {
+            error_log("Database connection error: " . $e->getMessage());
+            return null;
+        }
+    }
+    return $conn;
+}
+
+// Validate login credentials
+function validateLogin($username, $password) {
+    // Input validation
+    $username = trim($username);
+    $password = trim($password);
+    
+    if (empty($username) || empty($password)) {
+        return ['success' => false, 'message' => 'Username and password are required'];
+    }
+    
+    if (strlen($username) > 50 || strlen($password) > 100) {
+        return ['success' => false, 'message' => 'Invalid input length'];
+    }
+    
+    // Check for rate limiting
+    if ($_SESSION['login_attempts'] >= 5) {
+        $time_since_last = time() - $_SESSION['last_login_attempt'];
+        if ($time_since_last < 300) { // 5 minutes lockout
+            return ['success' => false, 'message' => 'Too many login attempts. Please wait 5 minutes.'];
+        } else {
+            // Reset attempts after lockout period
+            $_SESSION['login_attempts'] = 0;
+        }
+    }
+    
+    $conn = getDBConnection();
+    if (!$conn) {
+        return ['success' => false, 'message' => 'Database connection error'];
+    }
+    
+    try {
+        // In a real application, you should have a users table
+        // Example: users table with columns: id, username, password_hash, is_active, last_login
+        $stmt = $conn->prepare("SELECT id, password_hash, is_active FROM users WHERE username = ?");
+        $stmt->bind_param("s", $username);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        if ($result->num_rows === 1) {
+            $user = $result->fetch_assoc();
+            
+            // Check if account is active
+            if (!$user['is_active']) {
+                return ['success' => false, 'message' => 'Account is disabled. Contact administrator.'];
+            }
+            
+            // Verify password - IMPORTANT: Use password_verify() for stored hashed passwords
+            if (password_verify($password, $user['password_hash'])) {
+                // Password is correct
+                $_SESSION['login_attempts'] = 0; // Reset attempts on successful login
+                
+                // Update last login time
+                $updateStmt = $conn->prepare("UPDATE users SET last_login = NOW() WHERE id = ?");
+                $updateStmt->bind_param("i", $user['id']);
+                $updateStmt->execute();
+                $updateStmt->close();
+                
+                // Set session variables
+                $_SESSION['user_id'] = $user['id'];
+                $_SESSION['logged_in'] = true;
+                $_SESSION['username'] = $username;
+                $_SESSION['csrf_token'] = bin2hex(random_bytes(32)); // Generate CSRF token
+                
+                // Regenerate session ID to prevent fixation
+                session_regenerate_id(true);
+                
+                // Log successful login
+                error_log("Successful login for user: " . $username . " from IP: " . $_SERVER['REMOTE_ADDR']);
+                
+                return ['success' => true];
+            } else {
+                // Password is incorrect
+                $_SESSION['login_attempts']++;
+                $_SESSION['last_login_attempt'] = time();
+                
+                // Log failed attempt
+                error_log("Failed login attempt for user: " . $username . " from IP: " . $_SERVER['REMOTE_ADDR']);
+                
+                return ['success' => false, 'message' => 'Invalid username or password'];
+            }
+        } else {
+            // User not found
+            $_SESSION['login_attempts']++;
+            $_SESSION['last_login_attempt'] = time();
+            
+            // Generic error message (don't reveal if user exists)
+            return ['success' => false, 'message' => 'Invalid username or password'];
+        }
+        
+        $stmt->close();
+    } catch (Exception $e) {
+        error_log("Login error: " . $e->getMessage());
+        return ['success' => false, 'message' => 'Authentication error. Please try again.'];
+    }
+}
 
 // --- BACKEND LOGIC ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Add Content-Type header
     header('Content-Type: application/json');
     
-    // In a real app, connect to your DB here
-    // $pdo = new PDO("mysql:host=localhost;dbname=mydb", "user", "pass");
-
+    // Validate CSRF token if needed (you might want to add this to your form)
+    // if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+    //     echo json_encode(['success' => false, 'message' => 'Invalid security token']);
+    //     exit;
+    // }
+    
     $username = $_POST['username'] ?? '';
     $password = $_POST['password'] ?? '';
-
-    // MOCK VALIDATION (Replace this with database verification) 
-    if ($username == 'admin' && $password =='password123') {
-        
-        $_SESSION['user_id'] = 1; 
-        $_SESSION['logged_in'] = true;
-        session_regenerate_id(true); // Security: Prevents session hijacking
-
-        echo json_encode(['success' => true]);
-    } else {
-        echo json_encode(['success' => false, 'message' => 'Invalid username or password.']);
-    }
-    exit; // Stop execution so HTML isn't sent during a POST request
+    
+    // Perform validation
+    $result = validateLogin($username, $password);
+    
+    echo json_encode($result);
+    exit;
 }
+
+// If not POST request, show the login form
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 
@@ -109,16 +257,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         @keyframes float {
-
-            0%,
-            100% {
+            0%, 100% {
                 transform: translateY(0) translateX(0);
             }
-
             33% {
                 transform: translateY(-20px) translateX(10px);
             }
-
             66% {
                 transform: translateY(10px) translateX(-10px);
             }
@@ -197,7 +341,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 opacity: 0;
                 transform: translateY(30px);
             }
-
             to {
                 opacity: 1;
                 transform: translateY(0);
@@ -361,40 +504,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             color: var(--primary-red);
         }
 
-        /* Remember & Forgot */
-        .form-options {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin: 5px 0;
-        }
-
-        .remember-me {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 0.9rem;
-            color: #aaa;
-        }
-
-        .checkbox {
-            width: 16px;
-            height: 16px;
-            accent-color: var(--primary-red);
-            cursor: pointer;
-        }
-
-        .forgot-password {
-            color: #aaa;
-            font-size: 0.9rem;
-            text-decoration: none;
-            transition: color 0.3s ease;
-        }
-
-        .forgot-password:hover {
-            color: var(--primary-red);
-        }
-
         /* Submit Button */
         .submit-btn {
             padding: 16px;
@@ -440,86 +549,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             left: 100%;
         }
 
-        /* Divider */
-        /*  .divider {
-            display: flex;
-            align-items: center;
-            margin: 25px 0;
-            color: #666;
-            font-size: 0.9rem;
-        }
-
-        .divider::before,
-        .divider::after {
-            content: '';
-            flex: 1;
-            height: 1px;
-            background: rgba(255, 255, 255, 0.1);
-        }
-
-        .divider span {
-            padding: 0 15px;
-        } */
-
-        /* Social Login */
-        /* .social-login {
-            display: flex;
-            gap: 15px;
-            margin-bottom: 25px;
-        }
-
-        .social-btn {
-            flex: 1;
-            padding: 14px;
-            border-radius: 10px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            background: rgba(30, 30, 30, 0.7);
-            color: #ddd;
-            font-size: 0.9rem;
-            font-weight: 500;
-            cursor: pointer;
-            transition: var(--transition);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-        }
-
-        .social-btn:hover {
-            background: rgba(40, 40, 40, 0.9);
-            border-color: var(--primary-red);
-            transform: translateY(-2px);
-        }
-
-        .social-btn.google {
-            color: #dd4b39;
-        }
-
-        .social-btn.github {
-            color: #f5f5f5;
-        } */
-
-        /* Signup Link */
-        /* .signup-link {
-            text-align: center;
-            margin-top: 25px;
-            color: #aaa;
-            font-size: 0.9rem;
-        }
-
-        .signup-link a {
-            color: var(--primary-red);
-            text-decoration: none;
-            font-weight: 600;
-            margin-left: 5px;
-            transition: color 0.3s ease;
-        }
-
-        .signup-link a:hover {
-            color: #fff;
-            text-decoration: underline;
-        } */
-
         /* Custom Cursor */
         .cursor-dot,
         .cursor-outline {
@@ -548,9 +577,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             box-shadow: 0 0 20px rgba(255, 255, 255, 0.05);
         }
 
-
-
-
         /* Responsive Design */
         @media (max-width: 768px) {
             * {
@@ -571,10 +597,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 font-size: 2rem;
             }
 
-            /* .social-login {
-                flex-direction: column;
-            } */
-
             .login-header {
                 padding: 20px 25px;
             }
@@ -583,12 +605,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         @media (max-width: 480px) {
             .login-container {
                 padding: 30px 20px;
-            }
-
-            .form-options {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 15px;
             }
 
             .back-home span {
@@ -673,8 +689,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <label class="form-label" for="username">Username</label>
                 <div class="input-with-icon">
                     <i class="fas fa-user input-icon"></i>
-                    <input type="text" id="username" class="form-input" placeholder="Enter your username or email"
-                        required>
+                    <input type="text" id="username" name="username" class="form-input" placeholder="Enter your username" required>
                 </div>
             </div>
 
@@ -682,46 +697,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <label class="form-label" for="password">Password</label>
                 <div class="input-with-icon">
                     <i class="fas fa-lock input-icon"></i>
-                    <input type="password" id="password" class="form-input" placeholder="Enter your password" required>
+                    <input type="password" id="password" name="password" class="form-input" placeholder="Enter your password" required>
                     <button type="button" class="password-toggle" id="passwordToggle">
                         <i class="far fa-eye"></i>
                     </button>
                 </div>
             </div>
 
-            <!-- <div class="form-options">
-                <label class="remember-me">
-                    <input type="checkbox" class="checkbox" id="rememberMe">
-                    <span>Remember me</span>
-                </label>
-                <a href="#" class="forgot-password">Forgot Password?</a>
-            </div> -->
-
             <button type="submit" class="submit-btn">
                 <i class="fas fa-sign-in-alt"></i> SIGN IN
             </button>
         </form>
-
-        <!-- Divider -->
-        <!-- <div class="divider">
-            <span>OR CONTINUE WITH</span>
-        </div> -->
-
-        <!-- Social Login -->
-        <!-- <div class="social-login">
-            <button type="button" class="social-btn google">
-                <i class="fab fa-google"></i> Google
-            </button>
-            <button type="button" class="social-btn github">
-                <i class="fab fa-github"></i> GitHub
-            </button>
-        </div> -->
-
-        <!-- Signup Link -->
-        <!-- <div class="signup-link">
-            Don't have an account? 
-            <a href="signup.html">Join the Universe</a>
-        </div> -->
     </div>
 
     <!-- Custom Cursor -->
@@ -771,15 +757,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         });
 
         // Add hover effect to interactive elements
-        const interactiveElements = document.querySelectorAll('button, a, input, .social-btn, .password-toggle');
+        const interactiveElements = document.querySelectorAll('button, a, input, .password-toggle');
 
         interactiveElements.forEach(el => {
             el.addEventListener('mouseenter', () => {
-                document.body.classList.add('hovering');
+                cursorDot.style.transform = 'translate(-50%, -50%) scale(1.5)';
+                cursorOutline.style.transform = 'translate(-50%, -50%) scale(1.2)';
             });
 
             el.addEventListener('mouseleave', () => {
-                document.body.classList.remove('hovering');
+                cursorDot.style.transform = 'translate(-50%, -50%) scale(1)';
+                cursorOutline.style.transform = 'translate(-50%, -50%) scale(1)';
             });
         });
 
@@ -798,19 +786,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         });
 
         // Form submission
-      const loginForm = document.getElementById('loginForm');
+        const loginForm = document.getElementById('loginForm');
         const errorAlert = document.getElementById('errorAlert');
         const successAlert = document.getElementById('successAlert');
 
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
 
-            // Use FormData to grab all input values automatically
-            const formData = new FormData(loginForm);
+            // Show loading state
+            const submitBtn = loginForm.querySelector('.submit-btn');
+            const originalText = submitBtn.innerHTML;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> SIGNING IN...';
+            submitBtn.disabled = true;
 
+            // Get form data
+            const formData = new FormData(loginForm);
+            
             try {
-                // We fetch from the SAME file (login.php)
-                const response = await fetch('login.php', {
+                // Send POST request to the same file
+                const response = await fetch('', {
                     method: 'POST',
                     body: formData
                 });
@@ -826,55 +820,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }, 1500);
                 } else {
                     successAlert.style.display = 'none';
-                    errorAlert.textContent = result.message;
+                    errorAlert.textContent = result.message || 'Invalid username or password. Please try again.';
                     errorAlert.style.display = 'block';
+                    
+                    // Shake animation for error
+                    loginForm.style.animation = 'shake 0.5s';
+                    setTimeout(() => {
+                        loginForm.style.animation = '';
+                    }, 500);
                 }
             } catch (error) {
-                errorAlert.textContent = "A server error occurred.";
+                errorAlert.textContent = "A network error occurred. Please check your connection.";
                 errorAlert.style.display = 'block';
+                console.error('Login error:', error);
+            } finally {
+                // Reset button state
+                submitBtn.innerHTML = originalText;
+                submitBtn.disabled = false;
             }
         });
 
-        // // Social login buttons
-        // document.querySelectorAll('.social-btn').forEach(button => {
-        //     button.addEventListener('click', function () {
-        //         const platform = this.classList.contains('google') ? 'Google' : 'GitHub';
-        //         alert(`This would normally redirect to ${platform} authentication.`);
-        //     });
-        // });
-
-        // // Forgot password link
-        // document.querySelector('.forgot-password').addEventListener('click', function (e) {
-        //     e.preventDefault();
-        //     alert('Password reset functionality would be implemented here.');
-        // });
+        // Add shake animation for errors
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes shake {
+                0%, 100% { transform: translateX(0); }
+                10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+                20%, 40%, 60%, 80% { transform: translateX(5px); }
+            }
+        `;
+        document.head.appendChild(style);
 
         // Initialize on page load
         window.addEventListener('DOMContentLoaded', () => {
             createParticles();
-
-            // Check if there's a saved username from "remember me"
-            const savedUsername = localStorage.getItem('savedUsername');
-            const rememberMe = document.getElementById('rememberMe');
-
-            if (savedUsername) {
-                document.getElementById('username').value = savedUsername;
-                rememberMe.checked = true;
-            }
-
-            // Update saved username when checkbox changes
-            rememberMe.addEventListener('change', function () {
-                if (!this.checked) {
-                    localStorage.removeItem('savedUsername');
-                }
-            });
-
-            // Save username on form submit if remember me is checked
-            loginForm.addEventListener('submit', function () {
-                if (rememberMe.checked) {
-                    localStorage.setItem('savedUsername', document.getElementById('username').value);
-                }
-            });
         });
     </script>
 </body> 
