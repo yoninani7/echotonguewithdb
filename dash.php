@@ -1,16 +1,12 @@
-<?php
-// Start session with security settings 
-session_set_cookie_params([
-    'lifetime' => 3600,
-    'path' => '/',
-    'domain' => '',
-    'secure' => isset($_SERVER['HTTPS']),
-    'httponly' => true,
-    'samesite' => 'Strict'
-]);
-
+<?php 
 session_start();
 session_regenerate_id(true);
+
+// Check if user is logged in
+if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
+    header('Location: login.php');
+    exit;
+}
 
 // Security headers
 header('X-Frame-Options: DENY');
@@ -1141,7 +1137,7 @@ try {
             <div class="user-info">
                 <div class="user-avatar">
                     <i class="fas fa-user"></i>
-                </div>
+                </div> 
                 <h3 class="user-name">Hermona</h3>
                 <p class="user-role">Administrator</p>
             </div>

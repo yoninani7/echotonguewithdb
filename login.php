@@ -1,176 +1,64 @@
 <?php
-// Start session with security settings
-session_set_cookie_params([
-    'lifetime' => 3600,
-    'path' => '/',
-    'domain' => '',
-    'secure' => isset($_SERVER['HTTPS']),
-    'httponly' => true,
-    'samesite' => 'Strict'
-]);
+session_start(); 
+// Hardcoded credentials (Change these to your desired login)
+$valid_username = 'admin';
+$valid_password = 'password123'; // Change this!
 
-session_start();
-
-// Security headers - IMPORTANT: Add these at the beginning
-header('X-Frame-Options: DENY');
-header('X-Content-Type-Options: nosniff');
-header('X-XSS-Protection: 1; mode=block');
-header('Referrer-Policy: strict-origin-when-cross-origin');
-
-// Rate limiting for login attempts
-if (!isset($_SESSION['login_attempts'])) {
-    $_SESSION['login_attempts'] = 0;
-    $_SESSION['last_login_attempt'] = time();
-}
-
-// Check if user is already logged in
+// If already logged in, redirect to dashboard
 if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) {
-    header('Location: dashboard.php');
-    exit();
-}
-
-// Database connection function
-function getDBConnection() {
-    static $conn = null;
-    if ($conn === null) {
-        $host = 'localhost';
-        $username = 'root';
-        $password = '';
-        $database = 'echotongue';
-        
-        try {
-            $conn = new mysqli($host, $username, $password, $database);
-            if ($conn->connect_error) {
-                throw new Exception("Database connection failed");
-            }
-            $conn->set_charset("utf8mb4");
-            $conn->query("SET SESSION sql_mode = 'STRICT_ALL_TABLES'");
-        } catch (Exception $e) {
-            error_log("Database connection error: " . $e->getMessage());
-            return null;
-        }
+    // Handle AJAX request
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['HTTP_X_REQUESTED_WITH'])) {
+        echo json_encode(['success' => true, 'redirect' => 'dash.php']);
+        exit;
     }
-    return $conn;
-}
-
-// Validate login credentials
-function validateLogin($username, $password) {
-    // Input validation
-    $username = trim($username);
-    $password = trim($password);
-    
-    if (empty($username) || empty($password)) {
-        return ['success' => false, 'message' => 'Username and password are required'];
-    }
-    
-    if (strlen($username) > 50 || strlen($password) > 100) {
-        return ['success' => false, 'message' => 'Invalid input length'];
-    }
-    
-    // Check for rate limiting
-    if ($_SESSION['login_attempts'] >= 5) {
-        $time_since_last = time() - $_SESSION['last_login_attempt'];
-        if ($time_since_last < 300) { // 5 minutes lockout
-            return ['success' => false, 'message' => 'Too many login attempts. Please wait 5 minutes.'];
-        } else {
-            // Reset attempts after lockout period
-            $_SESSION['login_attempts'] = 0;
-        }
-    }
-    
-    $conn = getDBConnection();
-    if (!$conn) {
-        return ['success' => false, 'message' => 'Database connection error'];
-    }
-    
-    try {
-        // In a real application, you should have a users table
-        // Example: users table with columns: id, username, password_hash, is_active, last_login
-        $stmt = $conn->prepare("SELECT id, password_hash, is_active FROM users WHERE username = ?");
-        $stmt->bind_param("s", $username);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        
-        if ($result->num_rows === 1) {
-            $user = $result->fetch_assoc();
-            
-            // Check if account is active
-            if (!$user['is_active']) {
-                return ['success' => false, 'message' => 'Account is disabled. Contact administrator.'];
-            }
-            
-            // Verify password - IMPORTANT: Use password_verify() for stored hashed passwords
-            if (password_verify($password, $user['password_hash'])) {
-                // Password is correct
-                $_SESSION['login_attempts'] = 0; // Reset attempts on successful login
-                
-                // Update last login time
-                $updateStmt = $conn->prepare("UPDATE users SET last_login = NOW() WHERE id = ?");
-                $updateStmt->bind_param("i", $user['id']);
-                $updateStmt->execute();
-                $updateStmt->close();
-                
-                // Set session variables
-                $_SESSION['user_id'] = $user['id'];
-                $_SESSION['logged_in'] = true;
-                $_SESSION['username'] = $username;
-                $_SESSION['csrf_token'] = bin2hex(random_bytes(32)); // Generate CSRF token
-                
-                // Regenerate session ID to prevent fixation
-                session_regenerate_id(true);
-                
-                // Log successful login
-                error_log("Successful login for user: " . $username . " from IP: " . $_SERVER['REMOTE_ADDR']);
-                
-                return ['success' => true];
-            } else {
-                // Password is incorrect
-                $_SESSION['login_attempts']++;
-                $_SESSION['last_login_attempt'] = time();
-                
-                // Log failed attempt
-                error_log("Failed login attempt for user: " . $username . " from IP: " . $_SERVER['REMOTE_ADDR']);
-                
-                return ['success' => false, 'message' => 'Invalid username or password'];
-            }
-        } else {
-            // User not found
-            $_SESSION['login_attempts']++;
-            $_SESSION['last_login_attempt'] = time();
-            
-            // Generic error message (don't reveal if user exists)
-            return ['success' => false, 'message' => 'Invalid username or password'];
-        }
-        
-        $stmt->close();
-    } catch (Exception $e) {
-        error_log("Login error: " . $e->getMessage());
-        return ['success' => false, 'message' => 'Authentication error. Please try again.'];
-    }
-}
-
-// --- BACKEND LOGIC ---
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Add Content-Type header
-    header('Content-Type: application/json');
-    
-    // Validate CSRF token if needed (you might want to add this to your form)
-    // if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
-    //     echo json_encode(['success' => false, 'message' => 'Invalid security token']);
-    //     exit;
-    // }
-    
-    $username = $_POST['username'] ?? '';
-    $password = $_POST['password'] ?? '';
-    
-    // Perform validation
-    $result = validateLogin($username, $password);
-    
-    echo json_encode($result);
+    header('Location: dash.php');
     exit;
 }
 
-// If not POST request, show the login form
+// Handle login
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $username = trim($_POST['username'] ?? '');
+    $password = trim($_POST['password'] ?? '');
+    
+    $response = ['success' => false, 'message' => ''];
+    
+    if (empty($username) || empty($password)) {
+        $response['message'] = "Username and password required";
+    } else {
+        // Check against hardcoded credentials
+        if ($username === $valid_username && $password === $valid_password) {
+            $_SESSION['user_id'] = 1;
+            $_SESSION['username'] = $username;
+            $_SESSION['logged_in'] = true;
+            
+            $response['success'] = true;
+            $response['redirect'] = 'dash.php';
+        } else {
+            $response['message'] = "Invalid username or password";
+        }
+    }
+    
+    // Check if it's an AJAX request
+    if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+        header('Content-Type: application/json');
+        echo json_encode($response);
+        exit;
+    } else {
+        // For non-AJAX requests
+        if (!$response['success']) {
+            $_SESSION['login_error'] = $response['message'];
+            header('Location: ' . $_SERVER['PHP_SELF']);
+            exit;
+        } else {
+            header('Location: dash.php');
+            exit;
+        }
+    }
+}
+
+// Display error from session if exists
+$error = $_SESSION['login_error'] ?? '';
+unset($_SESSION['login_error']);
 ?>
 
 <!DOCTYPE html>
@@ -642,6 +530,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             text-decoration: none;
             margin-left: 2%;
         }
+
+        /* Debug info - remove in production */
+        .debug-info {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            font-size: 0.7rem;
+            color: #666;
+            z-index: 100;
+            background: rgba(0,0,0,0.5);
+            padding: 5px;
+            border-radius: 3px;
+        }
     </style>
 </head>
 
@@ -671,12 +572,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <!-- Login Header -->
         <div class="login-header-inner">
             <h1 class="login-title">ACCESS PORTAL</h1>
-            <p class="login-subtitle">Enter your credentials to enter the Universe</p>
+            <p class="login-subtitle">Enter your credentials to enter the Universe</p> 
+             
         </div>
 
         <!-- Error/Success Messages -->
         <div class="alert error" id="errorAlert">
-            <i class="fas fa-exclamation-circle"></i> Invalid username or password. Please try again.
+            <i class="fas fa-exclamation-circle"></i> <span id="errorText">Invalid username or password. Please try again.</span>
         </div>
 
         <div class="alert success" id="successAlert">
@@ -689,7 +591,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <label class="form-label" for="username">Username</label>
                 <div class="input-with-icon">
                     <i class="fas fa-user input-icon"></i>
-                    <input type="text" id="username" name="username" class="form-input" placeholder="Enter your username" required>
+                    <input type="text" id="username" name="username" class="form-input" placeholder="Enter admin" value="admin">
                 </div>
             </div>
 
@@ -697,7 +599,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <label class="form-label" for="password">Password</label>
                 <div class="input-with-icon">
                     <i class="fas fa-lock input-icon"></i>
-                    <input type="password" id="password" name="password" class="form-input" placeholder="Enter your password" required>
+                    <input type="password" id="password" name="password" class="form-input" placeholder="Enter password123" value="password123">
                     <button type="button" class="password-toggle" id="passwordToggle">
                         <i class="far fa-eye"></i>
                     </button>
@@ -708,6 +610,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <i class="fas fa-sign-in-alt"></i> SIGN IN
             </button>
         </form>
+    </div>
+
+    <!-- Debug info - remove in production -->
+    <div class="debug-info">
+        Hardcoded Login | User: admin | Pass: password123
     </div>
 
     <!-- Custom Cursor -->
@@ -789,9 +696,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         const loginForm = document.getElementById('loginForm');
         const errorAlert = document.getElementById('errorAlert');
         const successAlert = document.getElementById('successAlert');
+        const errorText = document.getElementById('errorText');
+
+        // Show PHP error if exists (from non-AJAX submission)
+        <?php if (!empty($error)): ?>
+            errorText.textContent = "<?php echo htmlspecialchars($error); ?>";
+            errorAlert.style.display = 'block';
+        <?php endif; ?>
 
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
+
+            // Hide previous alerts
+            errorAlert.style.display = 'none';
+            successAlert.style.display = 'none';
 
             // Show loading state
             const submitBtn = loginForm.querySelector('.submit-btn');
@@ -806,31 +724,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Send POST request to the same file
                 const response = await fetch('', {
                     method: 'POST',
-                    body: formData
+                    body: formData,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
                 });
 
-                const result = await response.json();
+                // Check if response is JSON
+                const contentType = response.headers.get("content-type");
+                if (contentType && contentType.includes("application/json")) {
+                    const result = await response.json();
 
-                if (result.success) {
-                    errorAlert.style.display = 'none';
-                    successAlert.style.display = 'block';
-                    
-                    setTimeout(() => {
-                        window.location.href = 'dash.php';
-                    }, 1500);
+                    if (result.success) {
+                        successAlert.style.display = 'block';
+                        
+                        // Redirect after a short delay
+                        setTimeout(() => {
+                            window.location.href = result.redirect || 'dash.php';
+                        }, 1000);
+                    } else {
+                        errorText.textContent = result.message || 'Invalid username or password. Please try again.';
+                        errorAlert.style.display = 'block';
+                        
+                        // Shake animation for error
+                        loginForm.style.animation = 'shake 0.5s';
+                        setTimeout(() => {
+                            loginForm.style.animation = '';
+                        }, 500);
+                    }
                 } else {
-                    successAlert.style.display = 'none';
-                    errorAlert.textContent = result.message || 'Invalid username or password. Please try again.';
-                    errorAlert.style.display = 'block';
-                    
-                    // Shake animation for error
-                    loginForm.style.animation = 'shake 0.5s';
-                    setTimeout(() => {
-                        loginForm.style.animation = '';
-                    }, 500);
+                    // If not JSON, reload the page (traditional form submission fallback)
+                    window.location.reload();
                 }
             } catch (error) {
-                errorAlert.textContent = "A network error occurred. Please check your connection.";
+                errorText.textContent = "A network error occurred. Please check your connection.";
                 errorAlert.style.display = 'block';
                 console.error('Login error:', error);
             } finally {
