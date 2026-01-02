@@ -21,8 +21,8 @@ if (empty($_SERVER['HTTPS']) && $_SERVER['HTTP_HOST'] !== 'localhost' && $_SERVE
 }
 
 // ==================== CREDENTIALS ====================
-$valid_username = 'admin';
-$valid_password = 'password123'; 
+$valid_username = '1';
+$valid_password = '1'; 
 
 // ==================== SESSION VALIDATION ====================
 if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) {
@@ -43,6 +43,7 @@ if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) {
         $_SESSION['last_activity'] = time();
         
         if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['HTTP_X_REQUESTED_WITH'])) {
+           
             echo json_encode(['success' => true, 'redirect' => 'dash.php']);
             exit;
         }
@@ -227,7 +228,7 @@ function sendJsonResponse($response) {
             position: absolute;
             background-color: rgba(201, 19, 19, 0.93);
             border-radius: 50%;
-            animation: float 10s infinite ease-in-out;
+            animation: float 6s infinite ease-in-out;
         }
 
         @keyframes float {
@@ -665,7 +666,7 @@ function sendJsonResponse($response) {
         </a>
         <a href="index.html" class="back-home">
             <i class="fas fa-arrow-left"></i>
-            <span>Back to Home</span>
+            <span>Back to Main Site</span>
         </a>
     </header>
         
@@ -896,7 +897,7 @@ function sendJsonResponse($response) {
         }
 
         function showSuccess() {
-            document.getElementById('successAlert').style.display = 'flex';
+            document.getElementById('successAlert').style.display = 'flex';  
         }
 
         // ==================== KEYBOARD SHORTCUTS ====================
