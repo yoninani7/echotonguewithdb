@@ -308,7 +308,17 @@ try {
         }
 
         .sidebar {
-            background: rgba(15, 15, 15, 0.95);
+             background-image:
+        radial-gradient(white, rgba(255, 255, 255, .2) 2px, transparent 3px),
+        radial-gradient(white, rgba(255, 255, 255, .15) 1px, transparent 2px),
+        radial-gradient(white, rgba(255, 255, 255, .1) 2px, transparent 3px),
+        radial-gradient(white, rgba(255, 255, 255, .15) 1px, transparent 2px),
+        radial-gradient(white, rgba(255, 255, 255, .1) 2px, transparent 3px),
+        radial-gradient(white, rgba(255, 255, 255, .15) 1px, transparent 2px),
+        radial-gradient(white, rgba(255, 255, 255, .1) 2px, transparent 3px);
+    background-size: 550px 550px, 350px 350px,  350px 350px, 250px 250px, 250px 250px, 250px 250px;
+    background-position: 0 0, 40px 60px, 130px 270px;
+    scroll-behavior: smooth;
             border-right: 1px solid rgba(255, 255, 255, 0.1);
             padding: 30px 20px;
             position: sticky;
