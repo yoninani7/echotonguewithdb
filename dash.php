@@ -1,6 +1,24 @@
-<?php 
-session_start();
-session_regenerate_id(true);
+<?php
+/**
+ * SECURITY BEST PRACTICE: Set session cookie parameters before session_start()
+ * This prevents JavaScript from accessing the session ID (HttpOnly) and 
+ * ensures cookies are only sent over HTTPS (Secure).
+ */
+session_set_cookie_params([
+    'lifetime' => 0,
+    'path' => '/',
+    'domain' => '', 
+    'secure' => true,     // Set to false only if developing on localhost without SSL
+    'httponly' => true,
+    'samesite' => 'Strict'
+]);
+
+session_start(); 
+// Regenerate ID to prevent Session Fixation
+if (!isset($_SESSION['initiated'])) {
+    session_regenerate_id(true);
+    $_SESSION['initiated'] = true;
+}
 
 // Check if user is logged in
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
@@ -8,17 +26,13 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
     exit;
 }
 
-// Security headers
+// --- SECURITY HEADERS ---
 header('X-Frame-Options: DENY');
 header('X-Content-Type-Options: nosniff');
 header('X-XSS-Protection: 1; mode=block');
-header('Referrer-Policy: strict-origin-when-cross-origin');
-header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
+header('Referrer-Policy: strict-origin-when-cross-origin'); 
 
-// Content Security Policy  
-header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; img-src 'self' data: https:;");
-
-// Rate limiting
+// --- RATE LIMITING ---
 if (!isset($_SESSION['last_request'])) {
     $_SESSION['last_request'] = time();
     $_SESSION['request_count'] = 0;
@@ -33,210 +47,103 @@ if ($current_time - $_SESSION['last_request'] > 60) {
 $_SESSION['request_count']++;
 if ($_SESSION['request_count'] > 30) {
     header('HTTP/1.1 429 Too Many Requests');
-    die('Rate limit exceeded. Please wait and try again.');
+    die('Rate limit exceeded. Please wait a minute.');
 }
 
-// Generate CSRF token
+// --- CSRF TOKEN GENERATION ---
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
-// Database connection
+// --- DATABASE CONNECTION ---
 $host = 'localhost';
 $username = 'root';
 $password = '';
 $database = 'echotongue';
 
+// Use mysqli reporting for cleaner try/catch
+mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+
 try {
     $conn = new mysqli($host, $username, $password, $database);
-    if ($conn->connect_error) {
-        throw new Exception("Database connection failed");
-    }
     $conn->set_charset("utf8mb4");
-    $conn->query("SET SESSION sql_mode = 'STRICT_ALL_TABLES'");
 } catch (Exception $e) {
-    error_log("Database connection error: " . $e->getMessage());
-    die("A database error occurred. Please try again later.");
+    error_log("Connection failed: " . $e->getMessage());
+    die("A technical error occurred. Please try again later.");
 }
 
-// Validation function
-function validateThoughtText($text) {
+// --- VALIDATION FUNCTION ---
+function sanitizeInput($text) {
     $text = trim($text);
-    if (empty($text)) {
+    if (empty($text) || mb_strlen($text) > 1000) {
         return false;
     }
-    
-    // Check length
-    if (strlen($text) > 1000) {
-        return false;
-    }
-    
-    // Basic XSS protection
-    $text = strip_tags($text);
-    
-    // Remove any null bytes
-    $text = str_replace("\0", '', $text);
-    
-    return $text;
+    // We don't strip_tags here anymore; we will use htmlspecialchars on OUTPUT.
+    // This preserves the user's intended text while keeping the site safe.
+    return str_replace("\0", '', $text);
 }
 
-// Initialize variables
+// --- FORM HANDLING ---
 $message = '';
 $message_type = '';
-$id = 0;
 
-// Handle form submissions
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    // Validate CSRF token
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // 1. Verify CSRF Token
     if (!isset($_POST['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])) {
-        $message = "Invalid security token. Please refresh the page and try again.";
-        $message_type = "error";
-    } else {
-        // Add new thought
-        if (isset($_POST['add_thought'])) {
-            $thought_text = validateThoughtText($_POST['thought_text'] ?? '');
-            
-            if ($thought_text !== false) {
-                try {
-                    $stmt = $conn->prepare("INSERT INTO authors_thoughts (thought_date, thought_text) VALUES (NOW(), ?)");
-                    
-                    if ($stmt) {
-                        $stmt->bind_param("s", $thought_text);
-                        
-                        if ($stmt->execute()) {
-                            $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-                            $_SESSION['success_message'] = "Thought added successfully!";
-                            $stmt->close();
-                            header("Location: " . htmlspecialchars($_SERVER['PHP_SELF']));
-                            exit();
-                        } else {
-                            error_log("Error adding thought: " . $stmt->error);
-                            $message = "An error occurred while adding the thought. Please try again.";
-                            $message_type = "error";
-                        }
-                        $stmt->close();
-                    } else {
-                        error_log("Database prepare error: " . $conn->error);
-                        $message = "An error occurred. Please try again.";
-                        $message_type = "error";
-                    }
-                } catch (mysqli_sql_exception $e) {
-                    error_log("Database error: " . $e->getMessage());
-                    $message = "A database error occurred. Please try again.";
-                    $message_type = "error";
-                }
-            } else {
-                $message = "Invalid thought text. Please enter text between 1 and 1000 characters without suspicious content.";
-                $message_type = "error";
-            }
+        die("Security token mismatch.");
+    }
+
+    // 2. Process Actions
+    if (isset($_POST['add_thought'])) {
+        $thought_text = sanitizeInput($_POST['thought_text'] ?? '');
+        if ($thought_text) {
+            $stmt = $conn->prepare("INSERT INTO authors_thoughts (thought_date, thought_text) VALUES (NOW(), ?)");
+            $stmt->bind_param("s", $thought_text);
+            $stmt->execute();
+            $_SESSION['success_message'] = "Thought shared.";
+            header("Location: " . $_SERVER['PHP_SELF']);
+            exit;
         }
-        
-        // Update thought
-        if (isset($_POST['update_thought'])) {
-            $id = intval($_POST['edit_id'] ?? 0);
-            $thought_text = validateThoughtText($_POST['edit_text'] ?? '');
-            
-            if ($id > 0 && $thought_text !== false) {
-                try {
-                    $stmt = $conn->prepare("UPDATE authors_thoughts SET thought_text = ?, thought_date = NOW() WHERE id = ?");
-                    
-                    if ($stmt) {
-                        $stmt->bind_param("si", $thought_text, $id);
-                        
-                        if ($stmt->execute()) {
-                            $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-                            $_SESSION['success_message'] = "Thought updated successfully!";
-                            $stmt->close();
-                            header("Location: " . htmlspecialchars($_SERVER['PHP_SELF']));
-                            exit();
-                        } else {
-                            error_log("Error updating thought: " . $stmt->error);
-                            $message = "An error occurred while updating the thought. Please try again.";
-                            $message_type = "error";
-                        }
-                        $stmt->close();
-                    } else {
-                        error_log("Database prepare error: " . $conn->error);
-                        $message = "An error occurred. Please try again.";
-                        $message_type = "error";
-                    }
-                } catch (mysqli_sql_exception $e) {
-                    error_log("Database error: " . $e->getMessage());
-                    $message = "A database error occurred. Please try again.";
-                    $message_type = "error";
-                }
-            } else {
-                $message = "Invalid thought data!";
-                $message_type = "error";
-            }
+    }
+
+    if (isset($_POST['update_thought'])) {
+        $id = filter_input(INPUT_POST, 'edit_id', FILTER_VALIDATE_INT);
+        $thought_text = sanitizeInput($_POST['edit_text'] ?? '');
+        if ($id && $thought_text) {
+            $stmt = $conn->prepare("UPDATE authors_thoughts SET thought_text = ?, thought_date = NOW() WHERE id = ?");
+            $stmt->bind_param("si", $thought_text, $id);
+            $stmt->execute();
+            $_SESSION['success_message'] = "Thought updated.";
+            header("Location: " . $_SERVER['PHP_SELF']);
+            exit;
         }
-        
-        // Delete thought
-        if (isset($_POST['delete_id'])) {
-            $id = intval($_POST['delete_id']);
-            $token = $_POST['csrf_token'] ?? '';
-            
-            if ($id <= 0) {
-                $message = "Invalid thought ID.";
-                $message_type = "error";
-            } elseif (!hash_equals($_SESSION['csrf_token'], $token)) {
-                $message = "Invalid security token for deletion.";
-                $message_type = "error";
-            } else {
-                try {
-                    $stmt = $conn->prepare("DELETE FROM authors_thoughts WHERE id = ?");
-                    
-                    if ($stmt) {
-                        $stmt->bind_param("i", $id);
-                        
-                        if ($stmt->execute()) {
-                            $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-                            $_SESSION['success_message'] = "Thought deleted successfully!";
-                            $stmt->close();
-                            header("Location: " . htmlspecialchars($_SERVER['PHP_SELF']));
-                            exit();
-                        } else {
-                            error_log("Error deleting thought: " . $stmt->error);
-                            $message = "An error occurred while deleting the thought. Please try again.";
-                            $message_type = "error";
-                        }
-                        $stmt->close();
-                    }
-                } catch (mysqli_sql_exception $e) {
-                    error_log("Database error: " . $e->getMessage());
-                    $message = "A database error occurred. Please try again.";
-                    $message_type = "error";
-                }
-            }
+    }
+
+    if (isset($_POST['delete_id'])) {
+        $id = filter_input(INPUT_POST, 'delete_id', FILTER_VALIDATE_INT);
+        if ($id) {
+            $stmt = $conn->prepare("DELETE FROM authors_thoughts WHERE id = ?");
+            $stmt->bind_param("i", $id);
+            $stmt->execute();
+            $_SESSION['success_message'] = "Thought removed.";
+            header("Location: " . $_SERVER['PHP_SELF']);
+            exit;
         }
     }
 }
 
-// Check for success message from session
+// Fetch Success Messages
 if (isset($_SESSION['success_message'])) {
     $message = $_SESSION['success_message'];
     $message_type = "success";
     unset($_SESSION['success_message']);
 }
 
-// Fetch all thoughts for display
+// --- FETCH DATA ---
 $thoughts = [];
-try {
-    $result = $conn->query("SELECT * FROM authors_thoughts ORDER BY thought_date DESC");
-    if ($result) {
-        while ($row = $result->fetch_assoc()) {
-            $thoughts[] = $row;
-        }
-        $result->free();
-    } else {
-        error_log("Error fetching thoughts: " . $conn->error);
-        $message = "An error occurred while loading thoughts.";
-        $message_type = "error";
-    }
-} catch (mysqli_sql_exception $e) {
-    error_log("Database error: " . $e->getMessage());
-    $message = "A database error occurred while loading thoughts.";
-    $message_type = "error";
+$result = $conn->query("SELECT id, thought_date, thought_text FROM authors_thoughts ORDER BY thought_date DESC");
+while ($row = $result->fetch_assoc()) {
+    $thoughts[] = $row;
 }
 ?>
 <!DOCTYPE html>
@@ -306,19 +213,15 @@ try {
             grid-template-columns: 250px 1fr;
             min-height: 100vh;
         }
-
-        .sidebar {
-             background-image:
-        radial-gradient(white, rgba(255, 255, 255, .2) 2px, transparent 3px),
-        radial-gradient(white, rgba(255, 255, 255, .15) 1px, transparent 2px),
-        radial-gradient(white, rgba(255, 255, 255, .1) 2px, transparent 3px),
-        radial-gradient(white, rgba(255, 255, 255, .15) 1px, transparent 2px),
-        radial-gradient(white, rgba(255, 255, 255, .1) 2px, transparent 3px),
-        radial-gradient(white, rgba(255, 255, 255, .15) 1px, transparent 2px),
-        radial-gradient(white, rgba(255, 255, 255, .1) 2px, transparent 3px);
-    background-size: 550px 550px, 350px 350px,  350px 350px, 250px 250px, 250px 250px, 250px 250px;
-    background-position: 0 0, 40px 60px, 130px 270px;
-    scroll-behavior: smooth;
+       .sidebar {
+            background: rgba(8, 8, 8, 0.993); 
+            background-image: 
+            radial-gradient(white, rgba(255, 255, 255, .1) 2px, transparent 3px),
+            radial-gradient(white, rgba(255, 255, 255, .15) 1px, transparent 2px), 
+            radial-gradient(white, rgba(255, 255, 255, .15) 1px, transparent 2px) ;
+            background-size: 390px 450px, 350px 350px,  350px 450px, 450px 650px, 250px 250px ;
+            background-position: 0 0, 40px 1200px, 230px 370px;
+            scroll-behavior: smooth;
             border-right: 1px solid rgba(255, 255, 255, 0.1);
             padding: 30px 20px;
             position: sticky;
@@ -427,6 +330,8 @@ try {
         }
 
         .main-content {
+             background: rgba(8, 8, 8, 0.952); 
+                scroll-behavior: smooth;
             padding: 30px;
             overflow-y: auto;
             position: relative;
