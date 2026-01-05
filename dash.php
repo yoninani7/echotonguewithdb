@@ -1,4 +1,4 @@
-<?php
+<?php 
 /**
  * SECURITY BEST PRACTICE: Set session cookie parameters before session_start()
  * This prevents JavaScript from accessing the session ID (HttpOnly) and 
@@ -22,7 +22,7 @@ if (!isset($_SESSION['initiated'])) {
 
 // Check if user is logged in
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
-    header('Location: login.php');
+    header('Location: index.php');
     exit;
 }
 
@@ -55,11 +55,12 @@ if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
+
 // --- DATABASE CONNECTION ---
 $host = 'localhost';
-$username = 'root';
-$password = '';
-$database = 'echotongue';
+$username = 'dsintevr_echotongue';
+$password = 'aEZ6gWB2EQDgjsZehKGN';
+$database = 'dsintevr_echotongue';
 
 // Use mysqli reporting for cleaner try/catch
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
