@@ -158,6 +158,8 @@ function sendJsonResponse($response) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login | Echotongue</title> 
     <link rel="stylesheet" href="fontawesome-free-7.1.0-web/css/all.min.css">
+    <link rel="icon" href="echologo.png" sizes="32x32" type="image/x-icon">
+    <link rel="apple-touch-icon" sizes="180x180" href="assets/echologo.png">
     <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Montserrat:wght@300;400;500;600&family=Orbitron:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
