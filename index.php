@@ -20,8 +20,8 @@ if (empty($_SERVER['HTTPS']) && $_SERVER['HTTP_HOST'] !== 'localhost' && $_SERVE
 }
 
 // ==================== CREDENTIALS ====================
-$valid_username = '1';
-$valid_password = '1'; 
+$valid_username = 'hermona';
+$valid_password = 'shakespeare'; 
 
 // ==================== SESSION VALIDATION ====================
 if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) {
