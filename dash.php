@@ -1029,7 +1029,7 @@ while ($row = $result->fetch_assoc()) {
                 </a>
             </li>
             <li class="nav-item">
-                <a href="index.html" class="nav-link" onclick="closeMobileMenu()">
+                <a href="https://echotongue.dsintertravel.com" class="nav-link" onclick="closeMobileMenu()">
                     <i class="fas fa-home"></i>
                     <span>Back to Site</span>
                 </a>
@@ -1068,7 +1068,7 @@ while ($row = $result->fetch_assoc()) {
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a href="index.html" class="nav-link">
+                    <a href="https://echotongue.dsintertravel.com" class="nav-link">
                         <i class="fas fa-home"></i>
                         <span>Back to Site</span>
                     </a>
