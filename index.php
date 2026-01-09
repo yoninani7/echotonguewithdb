@@ -662,7 +662,7 @@ function sendJsonResponse($response) {
 
     <!-- Header -->
     <header class="login-header">
-        <a href="index.html" class="cinzel">
+        <a href="https://echotongue.dsintertravel.com" class="cinzel">
             Echotongue
         </a>
         <a href="https://echotongue.dsintertravel.com" class="back-home">
