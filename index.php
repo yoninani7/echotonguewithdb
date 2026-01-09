@@ -665,7 +665,7 @@ function sendJsonResponse($response) {
         <a href="index.html" class="cinzel">
             Echotongue
         </a>
-        <a href="echotongue.dsintertravel.com" class="back-home">
+        <a href="https://echotongue.dsintertravel.com" class="back-home">
             <i class="fas fa-arrow-left"></i>
             <span>Back to Main Site</span>
         </a>
