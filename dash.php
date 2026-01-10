@@ -1014,7 +1014,7 @@ while ($row = $result->fetch_assoc()) {
 <body>
     <!-- Mobile Header -->
     <div class="mobile-header">
-        <a href="index.html" class="mobile-logo">ECHOTONGUE</a>
+        <a href="https://echotongue.dsintertravel.com" class="mobile-logo">ECHOTONGUE</a>
         <button class="mobile-menu-btn" onclick="toggleMobileMenu()">
             <i class="fas fa-bars"></i>
         </button>
@@ -1047,7 +1047,7 @@ while ($row = $result->fetch_assoc()) {
         <!-- Desktop Sidebar -->
         <aside class="sidebar">
             <div class="sidebar-header">
-                <a href="index.html" class="logo">  
+                <a href="https://echotongue.dsintertravel.com" class="logo">  
                     <span>ECHOTONGUE</span>
                 </a>
             </div>
