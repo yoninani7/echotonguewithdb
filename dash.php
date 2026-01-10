@@ -1427,28 +1427,37 @@ function validateEditForm(event) {
         document.getElementById('previewSection').style.display = 'none';
     }
     
-    // Preview thought with XSS protection
-    function previewThought() {
+   function previewThought() {
+    try {
         const textElement = document.getElementById('thought_text');
-        let text = textElement.value.trim();
         const previewSection = document.getElementById('previewSection');
         const previewCard = document.getElementById('thoughtPreview');
         
-        // Clear previous errors
-        clearError('thoughtError');
+        // Check if all required elements exist
+        if (!textElement || !previewSection || !previewCard) {
+            console.error('Required elements not found');
+            return;
+        }
         
-        // Sanitize input
-        text = sanitizeInput(text);
+        let text = textElement.value.trim();
+        
+        // Clear previous errors
+        const errorElement = document.getElementById('thoughtError');
+        if (errorElement) {
+            errorElement.textContent = '';
+            errorElement.style.display = 'none';
+        }
         
         if (!text) {
-            showError('thoughtError', 'Please enter a thought to preview.');
+            if (errorElement) {
+                errorElement.textContent = 'Please enter a thought to preview.';
+                errorElement.style.display = 'block';
+            }
             textElement.focus();
             return;
         }
         
-        
-        
-        // Sanitize text for display
+        // Just use one sanitization method
         const sanitizedText = text
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
@@ -1472,7 +1481,11 @@ function validateEditForm(event) {
         
         previewSection.style.display = 'block';
         previewSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        
+    } catch (error) {
+        console.error('Error in previewThought:', error);
     }
+}
     
    // Edit thought modal
 function editThought(id) {
