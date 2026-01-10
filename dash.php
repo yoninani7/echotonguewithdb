@@ -73,17 +73,29 @@ try {
     die("A technical error occurred. Please try again later.");
 }
 
-// --- VALIDATION FUNCTION ---
+// Sanitize input - PHP function
 function sanitizeInput($text) {
-    $text = trim($text);
-    if (empty($text) || mb_strlen($text) > 1000) {
-        return false;
+    if (!is_string($text)) {
+        // Log error for debugging (don't output to user)
+        error_log('Invalid input type in sanitizeInput');
+        return '';
     }
-    // We don't strip_tags here anymore; we will use htmlspecialchars on OUTPUT.
-    // This preserves the user's intended text while keeping the site safe.
-    return str_replace("\0", '', $text);
-}
 
+    // Remove null characters
+    $text = str_replace("\0", '', $text);
+    
+    // Trim whitespace
+    $text = trim($text);
+    
+    // Remove HTML tags and encode special characters
+    $text = strip_tags($text);
+    $text = htmlspecialchars($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    
+    // Additional security: prevent excessive whitespace
+    $text = preg_replace('/\s+/', ' ', $text);
+    
+    return $text;
+}
 // --- FORM HANDLING ---
 $message = '';
 $message_type = '';
@@ -1188,16 +1200,17 @@ while ($row = $result->fetch_assoc()) {
                                     <td data-label="Actions">
                                         <div class="table-actions">
                                             <button class="btn btn-secondary btn-sm" 
-                                                    onclick="editThought(<?php echo (int)$thought['id']; ?>, '<?php echo addslashes(htmlspecialchars($thought['thought_text'], ENT_QUOTES, 'UTF-8')); ?>')">
-                                                <i class="fas fa-edit"></i> Edit
+                                                onclick="editThought(<?php echo (int)$thought['id']; ?>)"
+                                                data-thought-text="<?php echo htmlspecialchars($thought['thought_text'], ENT_QUOTES, 'UTF-8'); ?>">
+                                            <i class="fas fa-edit"></i> Edit
+                                        </button>
+                                            <form method="POST" action="" class="delete-form" data-thought-id="<?php echo (int)$thought['id']; ?>">
+                                            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8'); ?>">
+                                            <input type="hidden" name="delete_id" value="<?php echo (int)$thought['id']; ?>">
+                                            <button type="button" class="btn btn-danger btn-sm" onclick="confirmDelete(event, <?php echo (int)$thought['id']; ?>)">
+                                                <i class="fas fa-trash"></i> Delete
                                             </button>
-                                            <form method="POST" action="" onsubmit="return confirmDelete(event, <?php echo (int)$thought['id']; ?>)">
-                                                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8'); ?>">
-                                                <input type="hidden" name="delete_id" value="<?php echo (int)$thought['id']; ?>">
-                                                <button type="submit" class="btn btn-danger btn-sm">
-                                                    <i class="fas fa-trash"></i> Delete
-                                                </button>
-                                            </form>
+                                        </form>
                                         </div>
                                     </td>
                                 </tr>
@@ -1316,13 +1329,7 @@ while ($row = $result->fetch_assoc()) {
         mobileNav.classList.remove('show');
     }
     
-    // Input sanitization
-    function sanitizeInput(text) {
-        return text.trim()
-            .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-            .replace(/<[^>]*>/g, '')
-            .substring(0, 1000);
-    }
+    
     
     // Form validation
     function validateForm(event) {
@@ -1340,13 +1347,7 @@ while ($row = $result->fetch_assoc()) {
             textElement.focus();
             return false;
         }
-        
-        if (text.length > 1000) {
-            showError('thoughtError', 'Thought must be 1000 characters or less.');
-            textElement.focus();
-            return false;
-        }
-        
+         
         // Sanitize input
         text = sanitizeInput(text);
         textElement.value = text;
@@ -1355,31 +1356,26 @@ while ($row = $result->fetch_assoc()) {
     }
     
     // Validate edit form
-    function validateEditForm(event) {
-        const textElement = document.getElementById('edit_text');
-        let text = textElement.value.trim();
-        const errorDiv = document.getElementById('editError');
-        
-        // Sanitize input
-        text = sanitizeInput(text);
-        textElement.value = text;
-        
-        clearError('editError');
-        
-        if (!text) {
-            showError('editError', 'Please enter your thought.');
-            textElement.focus();
-            return false;
-        }
-        
-        if (text.length > 1000) {
-            showError('editError', 'Thought must be 1000 characters or less.');
-            textElement.focus();
-            return false;
-        }
-         
-        return true;
+function validateEditForm(event) {
+    const textElement = document.getElementById('edit_text');
+    let text = textElement.value;
+    
+    // Sanitize input
+    text = sanitizeInput(text);
+    textElement.value = text;
+    
+    clearError('editError');
+    
+    if (!text) {
+        showError('editError', 'Please enter your thought.');
+        textElement.focus();
+        return false;
     }
+    
+    // Additional validation if needed
+    
+    return true;
+}
     
     // Show error message
     function showError(elementId, message) {
@@ -1450,11 +1446,7 @@ while ($row = $result->fetch_assoc()) {
             return;
         }
         
-        if (text.length > 1000) {
-            showError('thoughtError', 'Thought must be 1000 characters or less.');
-            textElement.focus();
-            return;
-        }
+        
         
         // Sanitize text for display
         const sanitizedText = text
@@ -1482,48 +1474,61 @@ while ($row = $result->fetch_assoc()) {
         previewSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
     
-    // Edit thought modal
-    function editThought(id, text) {
-        // Properly decode the text
-        const decodedText = text
-            .replace(/\\'/g, "'")
-            .replace(/\\"/g, '"')
-            .replace(/\\\\/g, '\\');
-        
-        document.getElementById('edit_id').value = id;
-        const editTextarea = document.getElementById('edit_text');
-        editTextarea.value = decodedText; 
-        
-        // Show the modal
-        const modal = document.getElementById('editModal');
-        modal.classList.add('show');
-        document.body.style.overflow = 'hidden';
-        
-        clearError('editError');
-        
-        // Focus and resize
-        setTimeout(() => {
-            autoResize(editTextarea);
-            editTextarea.focus();
-            editTextarea.selectionStart = editTextarea.selectionEnd = editTextarea.value.length;
-        }, 100);
+   // Edit thought modal
+function editThought(id) {
+    // Get the thought text from the data attribute
+    const button = event.currentTarget;
+    const text = button.getAttribute('data-thought-text');
+    
+    if (!text) {
+        console.error('Could not retrieve thought text');
+        return;
     }
     
+    document.getElementById('edit_id').value = id;
+    const editTextarea = document.getElementById('edit_text');
+    
+    // Decode HTML entities and set the value
+    const decodedText = text
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#039;/g, "'")
+        .replace(/&nbsp;/g, ' ');
+    
+    editTextarea.value = decodedText; 
+    
+    // Show the modal
+    const modal = document.getElementById('editModal');
+    modal.classList.add('show');
+    document.body.style.overflow = 'hidden';
+    
+    clearError('editError');
+    
+    // Focus and resize
+    setTimeout(() => {
+        autoResize(editTextarea);
+        editTextarea.focus();
+        editTextarea.selectionStart = editTextarea.selectionEnd = editTextarea.value.length;
+    }, 100);
+}
+    
     // Confirm deletion
-    function confirmDelete(event, id) {
-        event.preventDefault();
-        event.stopPropagation();
-        
-        // Store the form to submit
-        deleteFormToSubmit = event.target;
-        
-        // Show confirmation modal
-        const modal = document.getElementById('confirmationModal');
-        modal.classList.add('show');
-        document.body.style.overflow = 'hidden';
-        
-        return false;
-    }
+function confirmDelete(event, id) {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    // Store the form to submit
+    deleteFormToSubmit = event.target.closest('.delete-form');
+    
+    // Show confirmation modal
+    const modal = document.getElementById('confirmationModal');
+    modal.classList.add('show');
+    document.body.style.overflow = 'hidden';
+    
+    return false;
+}
     
     // Close edit modal
     function closeModal() {
