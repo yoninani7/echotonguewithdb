@@ -57,10 +57,14 @@ if (empty($_SESSION['csrf_token'])) {
 
 
 // --- DATABASE CONNECTION ---
+// $host = 'localhost';
+// $username = 'dsintevr_echotongue';
+// $password = 'aEZ6gWB2EQDgjsZehKGN';
+// $database = 'dsintevr_echotongue';
 $host = 'localhost';
-$username = 'dsintevr_echotongue';
-$password = 'aEZ6gWB2EQDgjsZehKGN';
-$database = 'dsintevr_echotongue';
+$username = 'root';
+$password = '';
+$database = 'echotongue';
 
 // Use mysqli reporting for cleaner try/catch
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
@@ -96,6 +100,44 @@ function sanitizeInput($text) {
     
     return $text;
 }
+
+
+// Time elapsed helper function
+function time_elapsed_string($datetime, $full = false) {
+    $now = new DateTime;
+    $ago = new DateTime($datetime);
+    $diff = $now->diff($ago);
+
+    $diff->w = floor($diff->d / 7);
+    $diff->d -= $diff->w * 7;
+
+    $string = array(
+        'y' => 'year',
+        'm' => 'month',
+        'w' => 'week',
+        'd' => 'day',
+        'h' => 'hour',
+        'i' => 'minute',
+        's' => 'second',
+    );
+    
+    foreach ($string as $k => &$v) {
+        if ($diff->$k) {
+            $v = $diff->$k . ' ' . $v . ($diff->$k > 1 ? 's' : '');
+        } else {
+            unset($string[$k]);
+        }
+    }
+
+    if (!$full) $string = array_slice($string, 0, 1);
+    return $string ? implode(', ', $string) . ' ago' : 'just now';
+}
+
+// --- TAB MANAGEMENT ---
+// Determine active tab from GET parameter or default to 'thoughts'
+$active_tab = isset($_GET['tab']) && in_array($_GET['tab'], ['thoughts', 'feedbacks', 'newsletter']) 
+    ? $_GET['tab'] 
+    : 'thoughts';
 // --- FORM HANDLING ---
 $message = '';
 $message_type = '';
@@ -106,7 +148,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         die("Security token mismatch.");
     }
 
-    // 2. Process Actions
+    // 2. Process Actions for thoughts tab
     if (isset($_POST['add_thought'])) {
         $thought_text = sanitizeInput($_POST['thought_text'] ?? '');
         if ($thought_text) {
@@ -114,7 +156,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->bind_param("s", $thought_text);
             $stmt->execute();
             $_SESSION['success_message'] = "Thought shared.";
-            header("Location: " . $_SERVER['PHP_SELF']);
+            header("Location: " . $_SERVER['PHP_SELF'] . "?tab=thoughts");
             exit;
         }
     }
@@ -127,7 +169,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->bind_param("si", $thought_text, $id);
             $stmt->execute();
             $_SESSION['success_message'] = "Thought updated.";
-            header("Location: " . $_SERVER['PHP_SELF']);
+            header("Location: " . $_SERVER['PHP_SELF'] . "?tab=thoughts");
             exit;
         }
     }
@@ -139,10 +181,89 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->bind_param("i", $id);
             $stmt->execute();
             $_SESSION['success_message'] = "Thought removed.";
-            header("Location: " . $_SERVER['PHP_SELF']);
+            header("Location: " . $_SERVER['PHP_SELF'] . "?tab=thoughts");
             exit;
         }
     }
+    
+    // 3. Process Actions for feedbacks tab
+    if (isset($_POST['mark_read'])) {
+        $id = filter_input(INPUT_POST, 'mark_read', FILTER_VALIDATE_INT);
+        if ($id) {
+            $stmt = $conn->prepare("UPDATE feedbacks SET status = 'read' WHERE id = ?");
+            $stmt->bind_param("i", $id);
+            $stmt->execute();
+            $_SESSION['success_message'] = "Feedback marked as read.";
+            header("Location: " . $_SERVER['PHP_SELF'] . "?tab=feedbacks");
+            exit;
+        }
+    }
+    
+    if (isset($_POST['delete_feedback'])) {
+        $id = filter_input(INPUT_POST, 'delete_feedback_id', FILTER_VALIDATE_INT);
+        if ($id) {
+            $stmt = $conn->prepare("DELETE FROM feedbacks WHERE id = ?");
+            $stmt->bind_param("i", $id);
+            $stmt->execute();
+            $_SESSION['success_message'] = "Feedback deleted.";
+            header("Location: " . $_SERVER['PHP_SELF'] . "?tab=feedbacks");
+            exit;
+        }
+    }
+    // 4. Process Actions for newsletter tab
+     
+if (isset($_POST['delete_subscriber'])) {
+    $id = filter_input(INPUT_POST, 'delete_subscriber_id', FILTER_VALIDATE_INT);
+    if ($id) {
+        try {
+            $stmt = $conn->prepare("DELETE FROM newsletter WHERE id = ?");
+            $stmt->bind_param("i", $id);
+            $stmt->execute();
+            
+            if ($stmt->affected_rows > 0) {
+                $_SESSION['success_message'] = "Subscriber removed successfully.";
+            } else {
+                $_SESSION['error_message'] = "Subscriber not found or already deleted.";
+            }
+            header("Location: " . $_SERVER['PHP_SELF'] . "?tab=newsletter");
+            exit;
+        } catch (Exception $e) {
+            error_log("Delete failed: " . $e->getMessage());
+            $_SESSION['error_message'] = "Failed to delete subscriber. Please try again.";
+            header("Location: " . $_SERVER['PHP_SELF'] . "?tab=newsletter");
+            exit;
+        }
+    }
+}
+ 
+if (isset($_POST['export_newsletter'])) {
+    // Check if there are subscribers before exporting
+    $checkResult = $conn->query("SELECT COUNT(*) as total FROM newsletter");
+    $checkRow = $checkResult->fetch_assoc();
+    
+    if ($checkRow['total'] == 0) {
+        $_SESSION['error_message'] = "No subscribers to export.";
+        header("Location: " . $_SERVER['PHP_SELF'] . "?tab=newsletter");
+        exit;
+    }
+    
+    // Export newsletter subscribers to CSV
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename=newsletter_subscribers_' . date('Y-m-d') . '.csv');
+    
+    $output = fopen('php://output', 'w');
+    // Add BOM for UTF-8
+    fwrite($output, "\xEF\xBB\xBF");
+    fputcsv($output, array('ID', 'Email', 'Date Subscribed'));
+    
+    $result = $conn->query("SELECT id, email, date_subscribed FROM newsletter ORDER BY date_subscribed DESC");
+    while ($row = $result->fetch_assoc()) {
+        fputcsv($output, $row);
+    }
+    fclose($output);
+    exit;
+}
+
 }
 
 // Fetch Success Messages
@@ -152,11 +273,30 @@ if (isset($_SESSION['success_message'])) {
     unset($_SESSION['success_message']);
 }
 
-// --- FETCH DATA ---
+// --- FETCH DATA BASED ON ACTIVE TAB ---
 $thoughts = [];
-$result = $conn->query("SELECT id, thought_date, thought_text FROM authors_thoughts ORDER BY thought_date DESC");
-while ($row = $result->fetch_assoc()) {
-    $thoughts[] = $row;
+$feedbacks = [];
+$newsletter_subscribers = [];
+
+
+if ($active_tab === 'thoughts') {
+    // Fetch thoughts data
+    $result = $conn->query("SELECT id, thought_date, thought_text FROM authors_thoughts ORDER BY thought_date DESC");
+    while ($row = $result->fetch_assoc()) {
+        $thoughts[] = $row;
+    }
+} elseif ($active_tab === 'feedbacks') {
+    // Fetch feedbacks data with rating
+    $result = $conn->query("SELECT id, name, email, message, rating, created_at, status FROM feedbacks ORDER BY created_at DESC");
+    while ($row = $result->fetch_assoc()) {
+        $feedbacks[] = $row;
+    }
+} elseif ($active_tab === 'newsletter') {
+    // Fetch newsletter subscribers data
+    $result = $conn->query("SELECT id, email, date_subscribed FROM newsletter ORDER BY date_subscribed DESC");
+    while ($row = $result->fetch_assoc()) {
+        $newsletter_subscribers[] = $row;
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -164,7 +304,15 @@ while ($row = $result->fetch_assoc()) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0"> 
-    <title>Dashboard | Author's Thoughts</title>
+    <title><?php 
+    if ($active_tab === 'thoughts') {
+        echo "Author's Thoughts";
+    } elseif ($active_tab === 'feedbacks') {
+        echo "Feedback Management";
+    } elseif ($active_tab === 'newsletter') {
+        echo "Newsletter Subscribers";
+    }
+?> | Dashboard</title>
     <link rel="icon" href="echologo.png" sizes="32x32" type="image/x-icon">
     <link rel="apple-touch-icon" sizes="180x180" href="assets/echologo.png">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -1006,6 +1154,53 @@ while ($row = $result->fetch_assoc()) {
             border-radius: 8px;
         }
         
+        /* Status badges */
+        .status-badge {
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            display: inline-block;
+        }
+
+        .status-pending {
+            background: rgba(255, 193, 7, 0.1);
+            color: #ffc107;
+            border: 1px solid rgba(255, 193, 7, 0.3);
+        }
+
+        .status-read {
+            background: rgba(76, 175, 80, 0.1);
+            color: #4CAF50;
+            border: 1px solid rgba(76, 175, 80, 0.3);
+        }
+
+        .status-archived {
+            background: rgba(158, 158, 158, 0.1);
+            color: #9e9e9e;
+            border: 1px solid rgba(158, 158, 158, 0.3);
+        }
+        
+        /* Tab indicator */
+        .tab-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: var(--primary-red);
+            border-radius: 50%;
+            margin-left: 8px;
+            vertical-align: middle;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
         @media (max-width: 768px) {
             .mobile-header {
                 display: flex;
@@ -1021,6 +1216,75 @@ while ($row = $result->fetch_assoc()) {
                 display: none;
             }
         }
+         /* 1. Set the height and overflow on the div */
+#viewFeedbackModal { 
+    overflow-y: auto; 
+    scrollbar-color: #5e5d5d var(--light-black); /* thumb and track colors for Firefox */ 
+}
+
+/* 2. Chrome, Edge, and Safari styles */
+#viewFeedbackModal::-webkit-scrollbar {
+    width: 8px; border-radius: 10px;
+}
+
+#viewFeedbackModal::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 10px;
+}
+
+#viewFeedbackModal::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 10px;
+}
+
+#viewFeedbackModal::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+@keyframes slideIn {
+    from { 
+        opacity: 0; 
+        transform: translateX(100%); 
+    }
+    to { 
+        opacity: 1; 
+        transform: translateX(0); 
+    }
+}
+
+.subscriber-email {
+    font-family: monospace;
+    background: rgba(0,0,0,0.2);
+    padding: 2px 6px;
+    border-radius: 3px;
+    border: 1px solid rgba(255,255,255,0.1);
+}
+/* Add this to your CSS section */
+.copy-notification {
+    animation: slideInFromRight 0.3s ease;
+}
+
+@keyframes slideInFromRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Add this to the existing @keyframes section if it doesn't exist */
+@keyframes slideInFromRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
     </style>
 </head>
 <body>
@@ -1033,28 +1297,45 @@ while ($row = $result->fetch_assoc()) {
     </div>
     
     <div class="mobile-nav" id="mobileNav">
-        <ul class="nav-menu">
-            <li class="nav-item">
-                <a href="#" class="nav-link active" onclick="closeMobileMenu()">
-                    <i class="fas fa-pen"></i>
-                    <span>Manage Thoughts</span>
-                </a>
-            </li>
-            <li class="nav-item">
-                <a href="https://echotongue.dsintertravel.com" class="nav-link" onclick="closeMobileMenu()">
-                    <i class="fas fa-home"></i>
-                    <span>Back to Site</span>
-                </a>
-            </li>
-            <li class="nav-item">
-                <a href="logout.php" class="nav-link logout-btn" onclick="closeMobileMenu()">
-                    <i class="fas fa-sign-out-alt"></i>
-                    <span>Logout</span>
-                </a>
-            </li>
-        </ul>
-    </div>
-   
+    <ul class="nav-menu">
+        <li class="nav-item">
+            <a href="?tab=thoughts" class="nav-link <?php echo $active_tab === 'thoughts' ? 'active' : ''; ?>" onclick="closeMobileMenu()">
+                <i class="fas fa-pen"></i>
+                <span>Manage Thoughts</span>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a href="?tab=feedbacks" class="nav-link <?php echo $active_tab === 'feedbacks' ? 'active' : ''; ?>" onclick="closeMobileMenu()">
+                <i class="fas fa-comment"></i>
+                <span>Feedbacks</span>
+                <?php if ($active_tab !== 'feedbacks' && count($feedbacks) > 0): ?>
+                    <span class="tab-indicator" title="<?php echo count($feedbacks); ?> new feedback"></span>
+                <?php endif; ?>
+            </a>
+        </li>
+        <li class="nav-item">
+    <a href="?tab=newsletter" class="nav-link <?php echo $active_tab === 'newsletter' ? 'active' : ''; ?>">
+        <i class="fas fa-envelope-open-text"></i>
+        <span>Newsletter</span>
+        <?php if ($active_tab !== 'newsletter' && count($newsletter_subscribers) > 0): ?>
+            <span class="tab-indicator" title="<?php echo count($newsletter_subscribers); ?> new subscribers"></span>
+        <?php endif; ?>
+    </a>
+</li>
+        <li class="nav-item">
+            <a href="https://echotongue.dsintertravel.com" class="nav-link" onclick="closeMobileMenu()">
+                <i class="fas fa-home"></i>
+                <span>Back to Site</span>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a href="logout.php" class="nav-link logout-btn" onclick="closeMobileMenu()">
+                <i class="fas fa-sign-out-alt"></i>
+                <span>Logout</span>
+            </a>
+        </li>
+    </ul>
+</div> 
     <div class="dashboard-container">
         <!-- Desktop Sidebar -->
         <aside class="sidebar">
@@ -1074,9 +1355,27 @@ while ($row = $result->fetch_assoc()) {
             
             <ul class="nav-menu">
                 <li class="nav-item">
-                    <a href="#" class="nav-link active">
+                    <a href="?tab=thoughts" class="nav-link <?php echo $active_tab === 'thoughts' ? 'active' : ''; ?>">
                         <i class="fas fa-pen"></i>
                         <span>Manage Thoughts</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="?tab=feedbacks" class="nav-link <?php echo $active_tab === 'feedbacks' ? 'active' : ''; ?>">
+                        <i class="fas fa-comment"></i>
+                        <span>Feedbacks</span>
+                        <?php if ($active_tab !== 'feedbacks' && count($feedbacks) > 0): ?>
+                            <span class="tab-indicator" title="<?php echo count($feedbacks); ?> new feedback"></span>
+                        <?php endif; ?>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="?tab=newsletter" class="nav-link <?php echo $active_tab === 'newsletter' ? 'active' : ''; ?>">
+                        <i class="fas fa-envelope-open-text"></i>
+                        <span>Newsletter</span>
+                        <?php if ($active_tab !== 'newsletter' && count($newsletter_subscribers) > 0): ?>
+                            <span class="tab-indicator" title="<?php echo count($newsletter_subscribers); ?> New subsciber"></span>
+                        <?php endif; ?>
                     </a>
                 </li>
                 <li class="nav-item">
@@ -1103,8 +1402,24 @@ while ($row = $result->fetch_assoc()) {
             
             <div class="dashboard-header">  
                 <div>
-                    <h1 class="page-title">Author's Dashboard</h1>
-                    <p class="page-subtitle">Manage your writing journey and share insights with readers</p>
+                    <h1 class="page-title">
+                        <?php 
+                            echo $active_tab === 'thoughts' 
+                                ? "Author's Dashboard" 
+                                : "Feedback Management";
+                        ?>
+                    </h1>
+                    <p class="page-subtitle">
+    <?php 
+        if ($active_tab === 'thoughts') {
+            echo "Manage your writing journey and share insights with readers";
+        } elseif ($active_tab === 'feedbacks') {
+            echo "View and manage user feedback and comments";
+        } elseif ($active_tab === 'newsletter') {
+            echo "Manage newsletter subscribers and export data";
+        }
+    ?>
+</p>
                 </div>
             </div>
             
@@ -1118,113 +1433,375 @@ while ($row = $result->fetch_assoc()) {
             </div>
             <?php endif; ?>
             
-            <!-- Add New Thought Form -->
-            <div class="form-card">
-                <h2><i class="fas fa-plus-circle"></i> Add New Thought</h2>
+            <!-- Thoughts Tab Content -->
+            <?php if ($active_tab === 'thoughts'): ?>
+                <!-- Add New Thought Form -->
+                <div class="form-card">
+                    <h2><i class="fas fa-plus-circle"></i> Add New Thought</h2>
+                    
+                    <form method="POST" action="" id="thoughtForm">
+                        <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8'); ?>">
+                        <div class="form-group">
+                            <label class="form-label" for="thought_text">Thought Text *</label>
+                            <textarea 
+                                id="thought_text" 
+                                name="thought_text" 
+                                class="form-textarea auto-resize"  
+                                placeholder="Share your writing insights, inspirations, or reflections..."
+                                required
+                                oninput="autoResize(this); clearError('thoughtError');"></textarea> 
+                          
+                            <div id="thoughtError" class="validation-error" style="display: none;">
+                                <i class="fas fa-exclamation-circle"></i>
+                                <span></span>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group action-buttons">
+                            <button type="submit" name="add_thought" class="btn" onclick="return validateForm(event)" id="submitBtn">
+                                <i class="fas fa-paper-plane"></i> Publish Thought
+                            </button>
+                            <button type="button" class="btn btn-secondary" onclick="previewThought()">
+                                <i class="fas fa-eye"></i> Preview
+                            </button>
+                            <button type="reset" class="btn btn-secondary" onclick="resetForm()">
+                                <i class="fas fa-redo"></i> Clear
+                            </button>
+                        </div>
+                    </form>
+                </div>
                 
-                <form method="POST" action="" id="thoughtForm">
-                    <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8'); ?>">
-                    <div class="form-group">
-                        <label class="form-label" for="thought_text">Thought Text *</label>
-                        <textarea 
-                            id="thought_text" 
-                            name="thought_text" 
-                            class="form-textarea auto-resize"  
-                            placeholder="Share your writing insights, inspirations, or reflections..."
-                            required
-                            oninput="autoResize(this); clearError('thoughtError');"></textarea> 
-                      
-                        <div id="thoughtError" class="validation-error" style="display: none;">
-                            <i class="fas fa-exclamation-circle"></i>
-                            <span></span>
+                <!-- Preview Section -->
+                <div class="preview-section" id="previewSection" style="display: none;">
+                    <h2 class="preview-title"><i class="fas fa-eye"></i> Thought Preview</h2>
+                    <div class="preview-card" id="thoughtPreview">
+                        <!-- Preview will be inserted here -->
+                    </div>
+                </div>
+                
+                <!-- Existing Thoughts Table -->
+                <div class="table-container" style="margin-top:20px;">
+                    <div class="table-header">
+                        <h2 class="table-title">Published Thoughts</h2>
+                        <span class="btn btn-secondary">
+                            <i class="fas fa-sync-alt"></i> <?php echo htmlspecialchars(count($thoughts), ENT_QUOTES, 'UTF-8'); ?> Total
+                        </span>
+                    </div>
+                    
+                    <?php if (count($thoughts) > 0): ?>
+                        <table class="thoughts-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Thought</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($thoughts as $thought): ?>
+                                    <tr>
+                                        <td data-label="Date">
+                                            <div class="preview-date">
+                                                <i class="far fa-calendar"></i>
+                                                <?php echo htmlspecialchars(date('M j, Y \a\t g:i A', strtotime($thought['thought_date'])), ENT_QUOTES, 'UTF-8'); ?>
+                                            </div>
+                                        </td>
+                                        <td data-label="Thought">
+                                            <div class="thought-text">
+                                                <?php 
+                                                    $text = htmlspecialchars($thought['thought_text'], ENT_QUOTES, 'UTF-8');
+                                                    echo strlen($text) > 200 ? substr($text, 0, 200) . '...' : $text;
+                                                ?>
+                                            </div>
+                                        </td>
+                                        <td data-label="Actions">
+                                            <div class="table-actions">
+                                                <button class="btn btn-secondary btn-sm" 
+                                                    onclick="editThought(<?php echo (int)$thought['id']; ?>)"
+                                                    data-thought-text="<?php echo htmlspecialchars($thought['thought_text'], ENT_QUOTES, 'UTF-8'); ?>">
+                                                <i class="fas fa-edit"></i> Edit
+                                            </button>
+                                                <form method="POST" action="" class="delete-form" data-thought-id="<?php echo (int)$thought['id']; ?>">
+                                                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8'); ?>">
+                                                <input type="hidden" name="delete_id" value="<?php echo (int)$thought['id']; ?>">
+                                                <button type="button" class="btn btn-danger btn-sm" onclick="confirmDelete(event, <?php echo (int)$thought['id']; ?>)">
+                                                    <i class="fas fa-trash"></i> Delete
+                                                </button>
+                                            </form>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    <?php else: ?>
+                        <div class="empty-state">
+                            <i class="fas fa-pen-nib"></i>
+                            <h3>No Thoughts Published Yet</h3>
+                            <p>Start sharing your writing journey by adding your first thought above.</p>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            
+            <!-- Feedbacks Tab Content -->
+            <?php elseif ($active_tab === 'feedbacks'): ?>
+                <div class="table-container">
+                    <div class="table-header">
+                        <h2 class="table-title"><i class="fas fa-comments"></i> User Feedbacks</h2>
+                        <div style="display: flex; gap: 10px;">
+                            <span class="btn btn-secondary">
+                                <i class="fas fa-envelope"></i> <?php echo htmlspecialchars(count($feedbacks), ENT_QUOTES, 'UTF-8'); ?> Total
+                            </span>
+                            <?php 
+                            $pendingCount = 0;
+                            foreach ($feedbacks as $feedback) {
+                                if ($feedback['status'] === 'pending') $pendingCount++;
+                            }
+                            if ($pendingCount > 0): ?>
+                            <span class="btn" style="background: rgba(255, 193, 7, 0.2); border: 1px solid rgba(255, 193, 7, 0.3); color: #ffc107;">
+                                <i class="fas fa-clock"></i> <?php echo $pendingCount; ?> Pending
+                            </span>
+                            <?php endif; ?>
                         </div>
                     </div>
                     
-                    <div class="form-group action-buttons">
-                        <button type="submit" name="add_thought" class="btn" onclick="return validateForm(event)" id="submitBtn">
-                            <i class="fas fa-paper-plane"></i> Publish Thought
-                        </button>
-                        <button type="button" class="btn btn-secondary" onclick="previewThought()">
-                            <i class="fas fa-eye"></i> Preview
-                        </button>
-                        <button type="reset" class="btn btn-secondary" onclick="resetForm()">
-                            <i class="fas fa-redo"></i> Clear
-                        </button>
-                    </div>
-                </form>
-            </div>
-            
-            <!-- Preview Section -->
-            <div class="preview-section" id="previewSection" style="display: none;">
-                <h2 class="preview-title"><i class="fas fa-eye"></i> Thought Preview</h2>
-                <div class="preview-card" id="thoughtPreview">
-                    <!-- Preview will be inserted here -->
-                </div>
-            </div>
-            
-            <!-- Existing Thoughts Table -->
-            <div class="table-container" style="margin-top:20px;">
-                <div class="table-header">
-                    <h2 class="table-title">Published Thoughts</h2>
-                    <span class="btn btn-secondary">
-                        <i class="fas fa-sync-alt"></i> <?php echo htmlspecialchars(count($thoughts), ENT_QUOTES, 'UTF-8'); ?> Total
-                    </span>
-                </div>
-                
-                <?php if (count($thoughts) > 0): ?>
-                    <table class="thoughts-table">
-                        <thead>
-                            <tr>
-                                <th>Date</th>
-                                <th>Thought</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($thoughts as $thought): ?>
+                    <?php if (count($feedbacks) > 0): ?>
+                        <table class="thoughts-table">
+                            <thead>
                                 <tr>
-                                    <td data-label="Date">
-                                        <div class="preview-date">
-                                            <i class="far fa-calendar"></i>
-                                            <?php echo htmlspecialchars(date('M j, Y \a\t g:i A', strtotime($thought['thought_date'])), ENT_QUOTES, 'UTF-8'); ?>
-                                        </div>
-                                    </td>
-                                    <td data-label="Thought">
-                                        <div class="thought-text">
-                                            <?php 
-                                                $text = htmlspecialchars($thought['thought_text'], ENT_QUOTES, 'UTF-8');
-                                                echo strlen($text) > 200 ? substr($text, 0, 200) . '...' : $text;
-                                            ?>
-                                        </div>
-                                    </td>
-                                    <td data-label="Actions">
-                                        <div class="table-actions">
-                                            <button class="btn btn-secondary btn-sm" 
-                                                onclick="editThought(<?php echo (int)$thought['id']; ?>)"
-                                                data-thought-text="<?php echo htmlspecialchars($thought['thought_text'], ENT_QUOTES, 'UTF-8'); ?>">
-                                            <i class="fas fa-edit"></i> Edit
-                                        </button>
-                                            <form method="POST" action="" class="delete-form" data-thought-id="<?php echo (int)$thought['id']; ?>">
-                                            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8'); ?>">
-                                            <input type="hidden" name="delete_id" value="<?php echo (int)$thought['id']; ?>">
-                                            <button type="button" class="btn btn-danger btn-sm" onclick="confirmDelete(event, <?php echo (int)$thought['id']; ?>)">
-                                                <i class="fas fa-trash"></i> Delete
-                                            </button>
-                                        </form>
-                                        </div>
-                                    </td>
+                                    <th>Date</th>
+                                    <th>Name</th>
+                                    <th>Rating</th>
+                                    <th>Message</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
                                 </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                <?php else: ?>
-                    <div class="empty-state">
-                        <i class="fas fa-pen-nib"></i>
-                        <h3>No Thoughts Published Yet</h3>
-                        <p>Start sharing your writing journey by adding your first thought above.</p>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($feedbacks as $feedback): ?>
+                                    <tr>
+                                        <td data-label="Date">
+                                            <?php echo htmlspecialchars(date('M j, Y', strtotime($feedback['created_at'])), ENT_QUOTES, 'UTF-8'); ?>
+                                        </td>
+                                        <td data-label="Name">
+                                            <div style="margin-bottom: 5px;">
+                                                <?php echo htmlspecialchars($feedback['name'], ENT_QUOTES, 'UTF-8'); ?>
+                                            </div>
+                                            <small style="color: #aaa; font-size: 0.8rem;">
+                                                <?php echo htmlspecialchars($feedback['email'], ENT_QUOTES, 'UTF-8'); ?>
+                                            </small>
+                                        </td>
+                                        <td data-label="Rating">
+                                            <div style="color: #ffc107;">
+                                                <?php 
+                                                $rating = (int)$feedback['rating'];
+                                                for ($i = 1; $i <= 5; $i++): 
+                                                    echo $i <= $rating ? '★' : '☆';
+                                                endfor; 
+                                                ?>
+                                                <span style="color: #ddd; margin-left: 5px;">(<?php echo $rating; ?>/5)</span>
+                                            </div>
+                                        </td>
+                                        <td data-label="Message">
+                                            <div class="thought-text">
+                                                <?php 
+                                                    $text = htmlspecialchars($feedback['message'], ENT_QUOTES, 'UTF-8');
+                                                    echo strlen($text) > 100 ? substr($text, 0, 100) . '...' : $text;
+                                                ?>
+                                            </div>
+                                        </td>
+                                        <td data-label="Status">
+                                            <span class="status-badge status-<?php echo htmlspecialchars($feedback['status'], ENT_QUOTES, 'UTF-8'); ?>">
+                                                <?php echo htmlspecialchars(ucfirst($feedback['status']), ENT_QUOTES, 'UTF-8'); ?>
+                                            </span>
+                                        </td>
+                                        <td data-label="Actions">
+                                            <div class="table-actions">
+                                                <button class="btn btn-secondary btn-sm" onclick="viewFeedback(<?php echo (int)$feedback['id']; ?>, '<?php echo htmlspecialchars(addslashes($feedback['name']), ENT_QUOTES, 'UTF-8'); ?>', '<?php echo htmlspecialchars(addslashes($feedback['email']), ENT_QUOTES, 'UTF-8'); ?>', '<?php echo htmlspecialchars(addslashes($feedback['message']), ENT_QUOTES, 'UTF-8'); ?>', <?php echo (int)$feedback['rating']; ?>, '<?php echo htmlspecialchars($feedback['created_at'], ENT_QUOTES, 'UTF-8'); ?>', '<?php echo htmlspecialchars($feedback['status'], ENT_QUOTES, 'UTF-8'); ?>')">
+                                                    <i class="fas fa-eye"></i> View
+                                                </button>
+                                                <?php if ($feedback['status'] === 'pending'): ?>
+                                                    <form method="POST" action="" style="display: inline;">
+                                                        <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8'); ?>">
+                                                        <input type="hidden" name="mark_read" value="<?php echo (int)$feedback['id']; ?>">
+                                                        <button type="submit" class="btn btn-sm" style="background: rgba(76, 175, 80, 0.2); border: 1px solid rgba(76, 175, 80, 0.3); color: #4CAF50;">
+                                                            <i class="fas fa-check"></i> Mark Read
+                                                        </button>
+                                                    </form>
+                                                <?php endif; ?>
+                                                
+                                            </div>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    <?php else: ?>
+                        <div class="empty-state">
+                            <i class="fas fa-comment-slash"></i>
+                            <h3>No Feedbacks Yet</h3>
+                            <p>User feedback will appear here once submitted.</p>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
+            <!-- Newsletter Tab Content -->
+
+            <?php if ($active_tab === 'newsletter'): ?>
+    <div class="table-container">
+        <div class="table-header">
+            <h2 class="table-title"><i class="fas fa-envelope-open-text"></i> Newsletter Subscribers</h2> 
+               <div style="display: flex; gap: 10px; align-items: center;">
+                    <span class="btn btn-secondary">
+                        <i class="fas fa-users"></i> <?php echo htmlspecialchars(count($newsletter_subscribers), ENT_QUOTES, 'UTF-8'); ?> Total
+                    </span>
+                     <?php if (count($newsletter_subscribers) > 0): ?>
+                            <form method="POST" action="" style="display: inline;">
+                                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8'); ?>">
+                                <input type="hidden" name="export_newsletter" value="1">
+                               <button type="submit" class="btn" 
+                                    aria-label="Export newsletter subscribers to CSV file"
+                                    title="Download CSV file with all subscribers">
+                                <i class="fas fa-download"></i> Export CSV (<?php echo count($newsletter_subscribers); ?>)
+                            </button>
+                            </form>
+                        <?php else: ?>
+                            <button type="button" class="btn" style="background: rgba(158, 158, 158, 0.2); border: 1px solid rgba(158, 158, 158, 0.3); color: #9e9e9e; cursor: not-allowed;" disabled>
+                                <i class="fas fa-download"></i> Export CSV (0)
+                            </button>
+                        <?php endif; ?>
+                </div>
+          
+        </div>
+        
+        <?php if (count($newsletter_subscribers) > 0): ?>
+            <table class="thoughts-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Email Address</th>
+                        <th>Date Subscribed</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($newsletter_subscribers as $subscriber): ?>
+                        <tr>
+                            <td data-label="ID">
+                                <?php echo htmlspecialchars($subscriber['id'], ENT_QUOTES, 'UTF-8'); ?>
+                            </td>
+                            <td data-label="Email">
+                                <div style="margin-bottom: 5px;">
+                                    <?php echo htmlspecialchars($subscriber['email'], ENT_QUOTES, 'UTF-8'); ?>
+                                </div>
+                            </td>
+                            <td data-label="Date Subscribed">
+                                <div style="color: #ddd;">
+                                    <?php echo htmlspecialchars(date('M j, Y \a\t g:i A', strtotime($subscriber['date_subscribed'])), ENT_QUOTES, 'UTF-8'); ?>
+                                </div>
+                                <small style="color: #aaa; font-size: 0.8rem;">
+                                    <?php echo htmlspecialchars(time_elapsed_string($subscriber['date_subscribed']), ENT_QUOTES, 'UTF-8'); ?> ago
+                                </small>
+                            </td>
+                            <td data-label="Actions">
+                                <div class="table-actions">
+                                    <!-- For copy button -->
+                        <button class="btn btn-secondary btn-sm" 
+                                onclick="copyEmail('<?php echo htmlspecialchars(addslashes($subscriber['email']), ENT_QUOTES, 'UTF-8'); ?>')"
+                                aria-label="Copy email address to clipboard"
+                                title="Copy email to clipboard">
+                            <i class="fas fa-copy"></i> Copy
+                        </button>
+                                    <!-- Replace the delete form in newsletter section (around line 1280) with: -->
+                                <form method="POST" action="" style="display: inline;">
+                                    <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8'); ?>">
+                                    <input type="hidden" name="delete_subscriber_id" value="<?php echo (int)$subscriber['id']; ?>">
+                                    <button type="submit" name="delete_subscriber" class="btn btn-danger btn-sm" onclick="return confirm('Are you sure you want to remove this subscriber?');">
+                                        <i class="fas fa-trash"></i> Delete
+                                    </button>
+                                </form>
+                                </div>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+            
+            <!-- Statistics Section -->
+            <div style="margin-top: 30px; padding: 20px; background: rgba(30, 30, 30, 0.5); border-radius: 10px;">
+                <h3 style="color: var(--primary-red); margin-bottom: 15px;">
+                    <i class="fas fa-chart-bar"></i> Newsletter Statistics
+                </h3>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                    <div style="text-align: center; padding: 15px; background: rgba(0,0,0,0.3); border-radius: 8px;">
+                        <div style="font-size: 2rem; color: var(--primary-red); font-weight: bold;">
+                            <?php echo count($newsletter_subscribers); ?>
+                        </div>
+                        <div style="color: #aaa;">Total Subscribers</div>
                     </div>
-                <?php endif; ?>
+                    <?php 
+                    // Calculate subscribers by month
+                    if (count($newsletter_subscribers) > 0) {
+                        $currentMonth = date('Y-m');
+                        $lastMonth = date('Y-m', strtotime('-1 month'));
+                        $currentMonthCount = 0;
+                        $lastMonthCount = 0;
+                        
+                        foreach ($newsletter_subscribers as $subscriber) {
+                            $subMonth = date('Y-m', strtotime($subscriber['date_subscribed']));
+                            if ($subMonth === $currentMonth) $currentMonthCount++;
+                            if ($subMonth === $lastMonth) $lastMonthCount++;
+                        }
+                        
+                        // This month's subscribers
+                        echo '
+                        <div style="text-align: center; padding: 15px; background: rgba(0,0,0,0.3); border-radius: 8px;">
+                            <div style="font-size: 2rem; color: #4CAF50; font-weight: bold;">
+                                ' . $currentMonthCount . '
+                            </div>
+                            <div style="color: #aaa;">This Month</div>
+                        </div>';
+                        
+                        // Last month's subscribers
+                        echo '
+                        <div style="text-align: center; padding: 15px; background: rgba(0,0,0,0.3); border-radius: 8px;">
+                            <div style="font-size: 2rem; color: #ff9800; font-weight: bold;">
+                                ' . $lastMonthCount . '
+                            </div>
+                            <div style="color: #aaa;">Last Month</div>
+                        </div>';
+                        
+                        // Today's subscribers
+                        $today = date('Y-m-d');
+                        $todayCount = 0;
+                        foreach ($newsletter_subscribers as $subscriber) {
+                            if (date('Y-m-d', strtotime($subscriber['date_subscribed'])) === $today) {
+                                $todayCount++;
+                            }
+                        }
+                        echo '
+                        <div style="text-align: center; padding: 15px; background: rgba(0,0,0,0.3); border-radius: 8px;">
+                            <div style="font-size: 2rem; color: #2196F3; font-weight: bold;">
+                                ' . $todayCount . '
+                            </div>
+                            <div style="color: #aaa;">Today</div>
+                        </div>';
+                    }
+                    ?>
+                </div>
             </div>
+            
+        <?php else: ?>
+            <div class="empty-state">
+                <i class="fas fa-envelope-open-text"></i>
+                <h3>No Newsletter Subscribers Yet</h3>
+                <p>Subscribers will appear here once they sign up through the website.</p>
+            </div>
+        <?php endif; ?>
+    </div>
+<?php endif; ?>
+
+  
         </main>
     </div>
     
@@ -1269,6 +1846,27 @@ while ($row = $result->fetch_assoc()) {
         </div>
     </div>
     
+    <!-- View Feedback Modal -->
+    <div class="modal" id="viewFeedbackModal" style="border-radius: 0px;">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeViewFeedbackModal()" aria-label="Close modal">&times;</button>
+            <div class="modal-header">
+                <h2 class="modal-title"><i class="fas fa-comment"></i> Feedback Details</h2>
+            </div>
+            <div id="feedbackContent">
+                <!-- Feedback content will be loaded here -->
+            </div>
+        </div>
+        // Inside the viewFeedback function, in the modal-actions section, add:
+<form method="POST" action="" style="display: inline;">
+    <input type="hidden" name="csrf_token" value="${csrfToken}">
+    <input type="hidden" name="delete_feedback_id" value="${id}">
+    <button type="submit" name="delete_feedback" class="btn btn-danger" onclick="return confirm('Are you sure you want to delete this feedback?')">
+        <i class="fas fa-trash"></i> Delete
+    </button>
+</form>
+    </div>
+    
     <!-- Delete Confirmation Modal -->
     <div class="confirmation-modal" id="confirmationModal">
         <div class="confirmation-content">
@@ -1276,7 +1874,7 @@ while ($row = $result->fetch_assoc()) {
                 <i class="fas fa-exclamation-triangle"></i> Confirm Deletion
             </h2>
             <p style="color: #ddd; font-size: 1.1rem; margin-bottom: 30px;">
-                Are you sure you want to delete this thought? This action cannot be undone.
+                Are you sure you want to delete this item? This action cannot be undone.
             </p>
             <div class="confirmation-actions">
                 <button type="button" class="btn btn-danger" id="confirmDeleteBtn">
@@ -1288,10 +1886,47 @@ while ($row = $result->fetch_assoc()) {
             </div>
         </div>
     </div>
+    <!-- Newsletter Subscriber Delete Confirmation Modal -->
+<div class="confirmation-modal" id="newsletterConfirmationModal">
+    <div class="confirmation-content">
+        <h2 style="color: var(--primary-red); margin-bottom: 20px;">
+            <i class="fas fa-exclamation-triangle"></i> Remove Subscriber
+        </h2>
+        <p style="color: #ddd; font-size: 1.1rem; margin-bottom: 30px;">
+            Are you sure you want to remove this subscriber from the newsletter? This action cannot be undone.
+        </p>
+        <div class="confirmation-actions">
+            <button type="button" class="btn btn-danger" id="confirmNewsletterDeleteBtn">
+                <i class="fas fa-trash"></i> Yes, Remove
+            </button>
+            <button type="button" class="btn btn-secondary" onclick="closeNewsletterConfirmationModal()">
+                <i class="fas fa-times"></i> Cancel
+            </button>
+        </div>
+    </div>
+</div>
+    
+    <!-- Feedback Delete Confirmation Modal -->
+    <div class="confirmation-modal" id="feedbackConfirmationModal">
+        <div class="confirmation-content">
+            <h2 style="color: var(--primary-red); margin-bottom: 20px;">
+                <i class="fas fa-exclamation-triangle"></i> Delete Feedback
+            </h2>
+            <p style="color: #ddd; font-size: 1.1rem; margin-bottom: 30px;">
+                Are you sure you want to delete this feedback? This action cannot be undone.
+            </p>
+            <div class="confirmation-actions"> 
+                <button type="button" class="btn btn-secondary" onclick="closeFeedbackConfirmationModal()">
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+            </div>
+        </div>
+    </div>
     
     <script>
     // Global variables
     let deleteFormToSubmit = null;
+    let feedbackDeleteFormToSubmit = null;
     
     // Update current time
     function updateTime() {
@@ -1319,17 +1954,38 @@ while ($row = $result->fetch_assoc()) {
     setInterval(updateTime, 1000);
     
     // Mobile menu functions
-    function toggleMobileMenu() {
-        const mobileNav = document.getElementById('mobileNav');
-        mobileNav.classList.toggle('show');
+  function toggleMobileMenu() {
+    const mobileNav = document.getElementById('mobileNav');
+    const menuBtn = document.querySelector('.mobile-menu-btn');
+    const icon = menuBtn.querySelector('i');
+    
+    mobileNav.classList.toggle('show');
+    menuBtn.classList.toggle('active');
+    
+    // Toggle icon
+    if (mobileNav.classList.contains('show')) {
+        icon.classList.remove('fa-bars');
+        icon.classList.add('fa-times');
+        document.body.style.overflow = 'hidden';
+    } else {
+        icon.classList.remove('fa-times');
+        icon.classList.add('fa-bars');
+        document.body.style.overflow = '';
     }
+}
+
+function closeMobileMenu() {
+    const mobileNav = document.getElementById('mobileNav');
+    const menuBtn = document.querySelector('.mobile-menu-btn');
+    const icon = menuBtn.querySelector('i');
     
-    function closeMobileMenu() {
-        const mobileNav = document.getElementById('mobileNav');
-        mobileNav.classList.remove('show');
-    }
-    
-    
+    mobileNav.classList.remove('show');
+    menuBtn.classList.remove('active');
+    icon.classList.remove('fa-times');
+    icon.classList.add('fa-bars');
+    document.body.style.overflow = '';
+}
+   
     
     // Form validation
     function validateForm(event) {
@@ -1356,26 +2012,24 @@ while ($row = $result->fetch_assoc()) {
     }
     
     // Validate edit form
-function validateEditForm(event) {
-    const textElement = document.getElementById('edit_text');
-    let text = textElement.value;
-    
-    // Sanitize input
-    text = sanitizeInput(text);
-    textElement.value = text;
-    
-    clearError('editError');
-    
-    if (!text) {
-        showError('editError', 'Please enter your thought.');
-        textElement.focus();
-        return false;
+    function validateEditForm(event) {
+        const textElement = document.getElementById('edit_text');
+        let text = textElement.value;
+        
+        // Sanitize input
+        text = sanitizeInput(text);
+        textElement.value = text;
+        
+        clearError('editError');
+        
+        if (!text) {
+            showError('editError', 'Please enter your thought.');
+            textElement.focus();
+            return false;
+        }
+        
+        return true;
     }
-    
-    // Additional validation if needed
-    
-    return true;
-}
     
     // Show error message
     function showError(elementId, message) {
@@ -1400,26 +2054,56 @@ function validateEditForm(event) {
         }
     }
     
-    // Set loading state on button
-    function setLoading(button, isLoading) {
-        if (!button) return;
+    // Client-side sanitization
+    function sanitizeInput(text) {
+        if (typeof text !== 'string') return '';
         
-        if (isLoading) {
-            button.disabled = true;
-            button.classList.add('btn-loading');
-            const originalText = button.innerHTML;
-            button.setAttribute('data-original-text', originalText);
-            button.innerHTML = '';
+        // Remove HTML tags
+        text = text.replace(/<[^>]*>/g, '');
+        
+        // Encode special characters
+        const div = document.createElement('div');
+        div.textContent = text;
+        text = div.innerHTML;
+        
+        // Trim and clean whitespace
+        text = text.trim();
+        text = text.replace(/\s+/g, ' ');
+        
+        return text;
+    }
+
+    function time_elapsed_string($datetime, $full = false) {
+    $now = new DateTime;
+    $ago = new DateTime($datetime);
+    $diff = $now->diff($ago);
+
+    $diff->w = floor($diff->d / 7);
+    $diff->d -= $diff->w * 7;
+
+    $string = array(
+        'y' => 'year',
+        'm' => 'month',
+        'w' => 'week',
+        'd' => 'day',
+        'h' => 'hour',
+        'i' => 'minute',
+        's' => 'second',
+    );
+    
+    foreach ($string as $k => &$v) {
+        if ($diff->$k) {
+            $v = $diff->$k . ' ' . $v . ($diff->$k > 1 ? 's' : '');
         } else {
-            button.disabled = false;
-            button.classList.remove('btn-loading');
-            const originalText = button.getAttribute('data-original-text');
-            if (originalText) {
-                button.innerHTML = originalText;
-            }
+            unset($string[$k]);
         }
     }
-    
+
+    if (!$full) $string = array_slice($string, 0, 1);
+    return $string ? implode(', ', $string) . ' ago' : 'just now';
+    }
+
+
     // Reset form
     function resetForm() {
         const thoughtText = document.getElementById('thought_text'); 
@@ -1427,121 +2111,221 @@ function validateEditForm(event) {
         document.getElementById('previewSection').style.display = 'none';
     }
     
-   function previewThought() {
-    try {
-        const textElement = document.getElementById('thought_text');
-        const previewSection = document.getElementById('previewSection');
-        const previewCard = document.getElementById('thoughtPreview');
-        
-        // Check if all required elements exist
-        if (!textElement || !previewSection || !previewCard) {
-            console.error('Required elements not found');
-            return;
+    function previewThought() {
+        try {
+            const textElement = document.getElementById('thought_text');
+            const previewSection = document.getElementById('previewSection');
+            const previewCard = document.getElementById('thoughtPreview');
+            
+            // Check if all required elements exist
+            if (!textElement || !previewSection || !previewCard) {
+                console.error('Required elements not found');
+                return;
+            }
+            
+            let text = textElement.value.trim();
+            
+            // Clear previous errors
+            const errorElement = document.getElementById('thoughtError');
+            if (errorElement) {
+                errorElement.textContent = '';
+                errorElement.style.display = 'none';
+            }
+            
+            if (!text) {
+                if (errorElement) {
+                    errorElement.textContent = 'Please enter a thought to preview.';
+                    errorElement.style.display = 'block';
+                }
+                textElement.focus();
+                return;
+            }
+            
+            // Just use one sanitization method
+            const sanitizedText = text
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;')
+                .replace(/\n/g, '<br>');
+            
+            previewCard.innerHTML = `
+                <div class="preview-date">
+                    <i class="far fa-calendar"></i> ${new Date().toLocaleDateString('en-US', { 
+                        month: 'short', 
+                        day: 'numeric', 
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    })}
+                </div>
+                <div class="preview-text">${sanitizedText}</div>
+            `;
+            
+            previewSection.style.display = 'block';
+            previewSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            
+        } catch (error) {
+            console.error('Error in previewThought:', error);
         }
-        
-        let text = textElement.value.trim();
-        
-        // Clear previous errors
-        const errorElement = document.getElementById('thoughtError');
-        if (errorElement) {
-            errorElement.textContent = '';
-            errorElement.style.display = 'none';
-        }
+    }
+    
+    // Edit thought modal
+    function editThought(id) {
+        // Get the thought text from the data attribute
+        const button = event.currentTarget;
+        const text = button.getAttribute('data-thought-text');
         
         if (!text) {
-            if (errorElement) {
-                errorElement.textContent = 'Please enter a thought to preview.';
-                errorElement.style.display = 'block';
-            }
-            textElement.focus();
+            console.error('Could not retrieve thought text');
             return;
         }
         
-        // Just use one sanitization method
-        const sanitizedText = text
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#039;')
-            .replace(/\n/g, '<br>');
+        document.getElementById('edit_id').value = id;
+        const editTextarea = document.getElementById('edit_text');
         
-        previewCard.innerHTML = `
-            <div class="preview-date">
-                <i class="far fa-calendar"></i> ${new Date().toLocaleDateString('en-US', { 
-                    month: 'short', 
-                    day: 'numeric', 
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                })}
+        // Decode HTML entities and set the value
+        const decodedText = text
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&quot;/g, '"')
+            .replace(/&#039;/g, "'")
+            .replace(/&nbsp;/g, ' ');
+        
+        editTextarea.value = decodedText; 
+        
+        // Show the modal
+        const modal = document.getElementById('editModal');
+        modal.classList.add('show');
+        document.body.style.overflow = 'hidden';
+        
+        clearError('editError');
+        
+        // Focus and resize
+        setTimeout(() => {
+            autoResize(editTextarea);
+            editTextarea.focus();
+            editTextarea.selectionStart = editTextarea.selectionEnd = editTextarea.value.length;
+        }, 100);
+    }
+    
+    // View feedback function
+   // View feedback function (update it in your dashboard JavaScript)
+function viewFeedback(id, name, email, message, rating, createdAt, status) {
+    const modal = document.getElementById('viewFeedbackModal');
+    const content = document.getElementById('feedbackContent');
+    
+    // Format the date
+    const date = new Date(createdAt);
+    const formattedDate = date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+    
+    // Get status class
+    const statusClass = `status-${status}`;
+    const statusText = status.charAt(0).toUpperCase() + status.slice(1);
+    
+    // Create star rating display
+    let starsHtml = '';
+    for (let i = 1; i <= 5; i++) {
+        starsHtml += i <= rating ? '★' : '☆';
+    }
+    
+    content.innerHTML = `
+        <div style="margin-bottom: 20px; ">
+            <div style="background: rgba(30, 30, 30, 0.5); padding: 25px; border-radius: 10px; margin-bottom: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h3 style="color: var(--text-white); margin: 0;">Feedback Details</h3>
+                    <span class="status-badge ${statusClass}">${statusText}</span>
+                </div>
+                
+                <div style="margin-bottom: 15px;">
+                    <strong style="color: var(--primary-red); display: block; margin-bottom: 5px;">From:</strong>
+                    <div style="color: #ddd; font-size: 1.1rem;">${sanitizeInput(name)}</div>
+                </div>
+                
+                <div style="margin-bottom: 15px;">
+                    <strong style="color: var(--primary-red); display: block; margin-bottom: 5px;">Email:</strong>
+                    <div style="color: #ddd; font-size: 1.1rem;">${sanitizeInput(email)}</div>
+                </div>
+                
+                <div style="margin-bottom: 15px;">
+                    <strong style="color: var(--primary-red); display: block; margin-bottom: 5px;">Rating:</strong>
+                    <div style="color: #ffc107; font-size: 1.2rem;">
+                        ${starsHtml}
+                        <span style="color: #ddd; margin-left: 10px;">${rating}/5</span>
+                    </div>
+                </div>
+                
+                <div style="margin-bottom: 15px;">
+                    <strong style="color: var(--primary-red); display: block; margin-bottom: 5px;">Date:</strong>
+                    <div style="color: #ddd; font-size: 1.1rem;">${formattedDate}</div>
+                </div>
+                
+                <div>
+                    <strong style="color: var(--primary-red); display: block; margin-bottom: 5px;">Message:</strong>
+                    <div style="color: #ddd; line-height: 1.6; background: rgba(0,0,0,0.2); padding: 15px; border-radius: 5px; border-left: 3px solid var(--primary-red);">
+                        ${sanitizeInput(message).replace(/\n/g, '<br>')}
+                    </div>
+                </div>
             </div>
-            <div class="preview-text">${sanitizedText}</div>
-        `;
-        
-        previewSection.style.display = 'block';
-        previewSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        
-    } catch (error) {
-        console.error('Error in previewThought:', error);
-    }
-}
+            
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeViewFeedbackModal()">
+                    <i class="fas fa-times"></i> Close
+                </button>
+                ${status === 'pending' ? `
+                <form method="POST" action="" style="display: inline;">
+                    <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8'); ?>">
+                    <input type="hidden" name="mark_read" value="${id}">
+                    <button type="submit" class="btn" style="background: rgba(76, 175, 80, 0.2); border: 1px solid rgba(76, 175, 80, 0.3); color: #4CAF50;">
+                        <i class="fas fa-check"></i> Mark as Read
+                    </button>
+                </form>
+                ` : ''}
+                 
+            </div>
+        </div>
+    `;
     
-   // Edit thought modal
-function editThought(id) {
-    // Get the thought text from the data attribute
-    const button = event.currentTarget;
-    const text = button.getAttribute('data-thought-text');
-    
-    if (!text) {
-        console.error('Could not retrieve thought text');
-        return;
-    }
-    
-    document.getElementById('edit_id').value = id;
-    const editTextarea = document.getElementById('edit_text');
-    
-    // Decode HTML entities and set the value
-    const decodedText = text
-        .replace(/&amp;/g, '&')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&quot;/g, '"')
-        .replace(/&#039;/g, "'")
-        .replace(/&nbsp;/g, ' ');
-    
-    editTextarea.value = decodedText; 
-    
-    // Show the modal
-    const modal = document.getElementById('editModal');
     modal.classList.add('show');
     document.body.style.overflow = 'hidden';
-    
-    clearError('editError');
-    
-    // Focus and resize
-    setTimeout(() => {
-        autoResize(editTextarea);
-        editTextarea.focus();
-        editTextarea.selectionStart = editTextarea.selectionEnd = editTextarea.value.length;
-    }, 100);
 }
     
-    // Confirm deletion
-function confirmDelete(event, id) {
-    event.preventDefault();
-    event.stopPropagation();
+    function closeViewFeedbackModal() {
+        const modal = document.getElementById('viewFeedbackModal');
+        modal.classList.remove('show');
+        document.body.style.overflow = '';
+    }
     
-    // Store the form to submit
-    deleteFormToSubmit = event.target.closest('.delete-form');
+    // Confirm deletion (for thoughts)
+    function confirmDelete(event, id) {
+        event.preventDefault();
+        event.stopPropagation();
+        
+        // Store the form to submit
+        deleteFormToSubmit = event.target.closest('.delete-form');
+        
+        // Update confirmation message
+        const message = document.querySelector('#confirmationModal .confirmation-content p');
+        if (message) {
+            message.textContent = 'Are you sure you want to delete this thought? This action cannot be undone.';
+        }
+        
+        // Show confirmation modal
+        const modal = document.getElementById('confirmationModal');
+        modal.classList.add('show');
+        document.body.style.overflow = 'hidden';
+        
+        return false;
+    }
     
-    // Show confirmation modal
-    const modal = document.getElementById('confirmationModal');
-    modal.classList.add('show');
-    document.body.style.overflow = 'hidden';
-    
-    return false;
-}
     
     // Close edit modal
     function closeModal() {
@@ -1564,6 +2348,16 @@ function confirmDelete(event, id) {
             document.body.style.overflow = '';
         }
         deleteFormToSubmit = null;
+    }
+    
+    // Close feedback confirmation modal
+    function closeFeedbackConfirmationModal() {
+        const modal = document.getElementById('feedbackConfirmationModal');
+        if (modal) {
+            modal.classList.remove('show');
+            document.body.style.overflow = '';
+        }
+        feedbackDeleteFormToSubmit = null;
     }
     
     // Close message
@@ -1634,7 +2428,7 @@ function confirmDelete(event, id) {
             }, 8000);
         });
         
-        // Setup delete confirmation
+        // Setup delete confirmation for thoughts
         const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
         if (confirmDeleteBtn) {
             confirmDeleteBtn.addEventListener('click', function() {
@@ -1644,9 +2438,11 @@ function confirmDelete(event, id) {
             });
         }
         
+        
+        
         // Keyboard shortcuts
         document.addEventListener('keydown', function(e) {
-            // Ctrl + Enter to submit main form
+            // Ctrl + Enter to submit main form (only in thoughts tab)
             if (e.ctrlKey && e.key === 'Enter' && !document.getElementById('editModal').classList.contains('show')) {
                 const thoughtForm = document.getElementById('thoughtForm');
                 if (thoughtForm) {
@@ -1661,6 +2457,8 @@ function confirmDelete(event, id) {
             if (e.key === 'Escape') {
                 closeModal();
                 closeConfirmationModal();
+                closeFeedbackConfirmationModal();
+                closeViewFeedbackModal();
                 closeMobileMenu();
             }
         });
@@ -1669,6 +2467,8 @@ function confirmDelete(event, id) {
         window.addEventListener('click', function(event) {
             const editModal = document.getElementById('editModal');
             const confirmationModal = document.getElementById('confirmationModal');
+            const feedbackConfirmationModal = document.getElementById('feedbackConfirmationModal');
+            const viewFeedbackModal = document.getElementById('viewFeedbackModal');
             const mobileNav = document.getElementById('mobileNav');
             
             if (event.target === editModal && editModal.classList.contains('show')) {
@@ -1676,6 +2476,12 @@ function confirmDelete(event, id) {
             }
             if (event.target === confirmationModal && confirmationModal.classList.contains('show')) {
                 closeConfirmationModal();
+            }
+            if (event.target === feedbackConfirmationModal && feedbackConfirmationModal.classList.contains('show')) {
+                closeFeedbackConfirmationModal();
+            }
+            if (event.target === viewFeedbackModal && viewFeedbackModal.classList.contains('show')) {
+                closeViewFeedbackModal();
             }
             if (mobileNav.classList.contains('show') && !event.target.closest('.mobile-nav') && !event.target.closest('.mobile-menu-btn')) {
                 closeMobileMenu();
@@ -1686,7 +2492,218 @@ function confirmDelete(event, id) {
         if (window.history.replaceState) {
             window.history.replaceState(null, null, window.location.href);
         }
+        
+        // Highlight active tab in URL
+        const activeTab = "<?php echo $active_tab; ?>";
+        if (activeTab === 'feedbacks') {
+            // Add subtle animation to feedback table
+            const feedbackTable = document.querySelector('.table-container');
+            if (feedbackTable) {
+                feedbackTable.style.animation = 'slideIn 0.5s ease';
+            }
+        }
     });
+      
+
+// Newsletter functionality
+let newsletterDeleteFormToSubmit = null;
+               function copyEmail(email) {
+    // Decode HTML entities properly
+    const textarea = document.createElement('textarea');
+    textarea.innerHTML = email;
+    const cleanEmail = textarea.value
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#039;/g, "'")
+        .replace(/&nbsp;/g, ' ');
+    
+    // Try modern Clipboard API first
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(cleanEmail).then(() => {
+            showCopyNotification('Email copied to clipboard!');
+        }).catch(err => {
+            // Fallback for older browsers
+            useFallbackCopy(cleanEmail);
+        });
+    } else {
+        // Use fallback
+        useFallbackCopy(cleanEmail);
+    }
+}
+
+function showCopyNotification(message) {
+    // Remove existing notification if any
+    const existing = document.querySelector('.copy-notification');
+    if (existing) existing.remove();
+    
+    // Create notification
+    const notification = document.createElement('div');
+    notification.className = 'copy-notification';
+    notification.innerHTML = `
+        <i class="fas fa-check-circle"></i> ${message}
+    `;
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: rgba(30, 30, 30, 0.95);
+        color: #4CAF50;
+        padding: 15px 20px;
+        border-radius: 8px;
+        border-left: 4px solid #4CAF50;
+        z-index: 99999;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        animation: slideInFromRight 0.3s ease;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Auto-remove after 3 seconds
+    setTimeout(() => {
+        notification.style.opacity = '0';
+        notification.style.transform = 'translateX(100%)';
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
+}
+
+function useFallbackCopy(text) {
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-9999px';
+    textArea.style.opacity = '0';
+    document.body.appendChild(textArea);
+    textArea.select();
+    
+    try {
+        const successful = document.execCommand('copy');
+        if (successful) {
+            showCopyNotification('Email copied to clipboard!');
+        } else {
+            showCopyNotification('Failed to copy. Please copy manually.');
+        }
+    } catch (err) {
+        showCopyNotification('Copy failed. Please copy manually: ' + text);
+    } finally {
+        document.body.removeChild(textArea);
+    }
+}
+
+function showNotification(message, type = 'success') {
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: ${type === 'success' ? 'rgba(30, 30, 30, 0.95)' : 'rgba(30, 30, 30, 0.95)'};
+        color: ${type === 'success' ? '#4CAF50' : '#ff6b6b'};
+        padding: 15px 20px;
+        border-radius: 8px;
+        border-left: 4px solid ${type === 'success' ? '#4CAF50' : '#ff6b6b'};
+        z-index: 99999;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        animation: slideIn 0.3s ease;
+        max-width: 300px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    `;
+    notification.innerHTML = `
+        <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'}"></i>
+        <span>${message}</span>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Remove after 3 seconds
+    setTimeout(() => {
+        notification.style.opacity = '0';
+        notification.style.transform = 'translateX(100%)';
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
+}
+
+// Add to newsletter delete buttons
+function confirmSubscriberDelete(event, id) {
+    event.preventDefault();
+    const form = event.target.closest('form');
+    const button = event.target;
+    
+    if (confirm('Are you sure you want to remove this subscriber?')) {
+        // Add loading state
+        button.classList.add('loading');
+        button.disabled = true;
+        
+        // Submit after short delay for visual feedback
+        setTimeout(() => {
+            form.submit();
+        }, 300);
+    }
+    return false;
+}
+function closeNewsletterConfirmationModal() {
+    const modal = document.getElementById('newsletterConfirmationModal');
+    if (modal) {
+        modal.classList.remove('show');
+        document.body.style.overflow = '';
+    }
+    newsletterDeleteFormToSubmit = null;
+}
+
+// Add this to your DOMContentLoaded event listener
+document.addEventListener('DOMContentLoaded', function() {
+    // ... existing code ...
+    
+    // Setup newsletter delete confirmation
+    const confirmNewsletterDeleteBtn = document.getElementById('confirmNewsletterDeleteBtn');
+    if (confirmNewsletterDeleteBtn) {
+        confirmNewsletterDeleteBtn.addEventListener('click', function() {
+            if (newsletterDeleteFormToSubmit) {
+                newsletterDeleteFormToSubmit.submit();
+            }
+        });
+    }
+    
+    // Update keyboard shortcuts to include newsletter modal
+    document.addEventListener('keydown', function(e) {
+        // ... existing code ...
+        
+        if (e.key === 'Escape') {
+            closeModal();
+            closeConfirmationModal();
+            closeFeedbackConfirmationModal();
+            closeNewsletterConfirmationModal(); // Add this
+            closeViewFeedbackModal();
+            closeMobileMenu();
+        }
+    });
+    
+    // Update click outside handler to include newsletter modal
+    window.addEventListener('click', function(event) {
+        // ... existing code ...
+        
+        const newsletterConfirmationModal = document.getElementById('newsletterConfirmationModal');
+        
+        if (event.target === newsletterConfirmationModal && newsletterConfirmationModal.classList.contains('show')) {
+            closeNewsletterConfirmationModal();
+        }
+    });
+});
+
+function confirmNewsletterDelete(id) {
+    const deleteForm = document.getElementById('deleteForm' + id);
+    if (!deleteForm) return;
+    
+    if (confirm('Are you sure you want to remove this subscriber from the newsletter?')) {
+        deleteForm.submit();
+    }
+}
     </script>
 </body>
 </html>
