@@ -559,14 +559,14 @@ if (isset($sql_count)) {
 
 <!-- 3. NEW CUSTOM DELETE MODAL -->
 <div id="deleteModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.9); backdrop-filter:blur(5px); z-index:2000; align-items:center; justify-content:center;">
-    <div class="glass-card" style="width:90%; max-width:400px; background:#151515; text-align:center; border: 1px solid rgba(255, 50, 50, 0.2);">
-        <div style="font-size:40px; color:#ff5555; margin-bottom:15px;"><i class="fas fa-exclamation-triangle"></i></div>
+    <div class="glass-card" style="width:90%; max-width:400px; background:#151515; text-align:center; border: 1px solid rgba(138, 9, 9, 0.2);">
+        <div style="font-size:40px; color: #c90202; margin-bottom:15px;"><i class="fas fa-exclamation-triangle"></i></div>
         <h3 style="margin-bottom:10px; color:#fff;">Are you sure?</h3>
         <p style="color:#aaa; margin-bottom:25px;">This action cannot be undone. Do you really want to delete this?</p>
         
         <div style="display:flex; justify-content:center; gap:15px;">
             <button class="btn btn-secondary" onclick="document.getElementById('deleteModal').style.display='none'">Cancel</button>
-            <button class="btn" onclick="confirmDeleteAction()">Yes, Delete</button>
+            <button class="btn btn-primary" onclick="confirmDeleteAction()">Yes, Delete</button>
         </div>
     </div>
 </div>
