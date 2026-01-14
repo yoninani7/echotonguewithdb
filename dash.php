@@ -7,25 +7,8 @@ session_set_cookie_params(lifetime_or_options: [
 ]);
 session_start();
 
-// Database Credentials
-define('DB_HOST', 'localhost');
-define('DB_USER', 'root');
-define('DB_PASS', '');
-define('DB_NAME', 'echotongue');
-
-// Settings
 define('ITEMS_PER_PAGE', 10);
-
-// Error Reporting
-mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
-
-// --- 2. DATABASE CONNECTION ---
-try {
-    $conn = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);
-    $conn->set_charset("utf8mb4");
-} catch (Exception $e) {
-    die("<div style='color:white; background:red; padding:20px; text-align:center; font-family:sans-serif;'>Database Connection Error. Please check credentials.</div>");
-}
+include 'db.php';
 
 // --- 3. HELPER FUNCTIONS ---
 function sanitize($text) { return htmlspecialchars(trim($text ?? ''), ENT_QUOTES | ENT_HTML5, 'UTF-8'); }
