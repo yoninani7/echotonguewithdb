@@ -1,38 +1,62 @@
 <?php
-session_start(); 
-// ==================== SECURITY CONFIGURATION ====================
+/**
+ * ECHO TONGUE - LOGIN PORTAL
+ * Optimized for Error Handling and Efficiency
+ */
+
+// 1. GLOBAL ERROR HANDLING - Ensures PHP errors don't break AJAX responses
+ob_start(); 
+error_reporting(E_ALL);
+
+set_exception_handler(function ($e) {
+    handleGlobalError("System Exception: " . $e->getMessage());
+});
+
+set_error_handler(function ($errno, $errstr, $errfile, $errline) {
+    if (!(error_reporting() & $errno)) return;
+    handleGlobalError("PHP Error: $errstr");
+});
+
+function handleGlobalError($msg) {
+    ob_clean();
+    if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['success' => false, 'message' => $msg]);
+        exit;
+    }
+    // For non-ajax, just let it fail gracefully
+    die($msg);
+}
+
+// 2. SESSION & SECURITY HEADERS
+try {
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+} catch (Exception $e) {
+    handleGlobalError("Session failed to initialize.");
+}
+
 header("X-Frame-Options: DENY");
 header("X-Content-Type-Options: nosniff");
 header("X-XSS-Protection: 1; mode=block");
 header("Referrer-Policy: strict-origin-when-cross-origin");
 
-// $csp = "default-src 'self'; ";
-// $csp .= "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com/ajax/libs; ";
-// $csp .= "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com/ajax/libs https://fonts.googleapis.com; ";
-// $csp .= "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com/ajax/libs; ";
-// $csp .= "img-src 'self' data:; ";
-// $csp .= "connect-src 'self';";
-// header("Content-Security-Policy: " . $csp);
-
+// HTTPS Enforcement
 if (empty($_SERVER['HTTPS']) && $_SERVER['HTTP_HOST'] !== 'localhost' && $_SERVER['HTTP_HOST'] !== '127.0.0.1') {
     header("Location: https://" . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI']);
     exit();
 }
 
-// ==================== CREDENTIALS ====================
+// 3. CREDENTIALS
 $valid_username = 'hermona';
 $valid_password = 'shakespeare'; 
 
-// ==================== SESSION VALIDATION ====================
+// 4. SESSION VALIDATION
 if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) {
-    $sessionFingerprint = $_SESSION['fingerprint'] ?? '';
-    $currentFingerprint = hash('sha256', 
-        $_SERVER['HTTP_USER_AGENT'] . 
-        (isset($_SERVER['HTTP_ACCEPT_LANGUAGE']) ? $_SERVER['HTTP_ACCEPT_LANGUAGE'] : '') .
-        $_SERVER['REMOTE_ADDR']
-    );
+    $currentFingerprint = hash('sha256', $_SERVER['HTTP_USER_AGENT'] . ($_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? '') . $_SERVER['REMOTE_ADDR']);
     
-    if (hash_equals($sessionFingerprint, $currentFingerprint)) {
+    if (hash_equals($_SESSION['fingerprint'] ?? '', $currentFingerprint)) {
         if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 1800)) {
             session_destroy();
             header('Location: ' . $_SERVER['PHP_SELF']);
@@ -40,114 +64,73 @@ if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) {
         }
         
         $_SESSION['last_activity'] = time();
-        
         if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['HTTP_X_REQUESTED_WITH'])) {
-           
             echo json_encode(['success' => true, 'redirect' => 'dash.php']);
             exit;
         }
-        
         header('Location: dash.php');
         exit;
     } else {
         session_destroy();
-        header('Location: ' . $_SERVER['PHP_SELF']);
-        exit;
     }
 }
 
-// ==================== LOGIN HANDLING ====================
+// 5. LOGIN HANDLING
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $csrfToken = $_POST['csrf_token'] ?? '';
-    $sessionCsrfToken = $_SESSION['csrf_token'] ?? '';
+    $response = ['success' => false, 'message' => 'An unknown error occurred.'];
     
-    if (!hash_equals($sessionCsrfToken, $csrfToken)) {
-        $response = ['success' => false, 'message' => 'Invalid security token. Please refresh the page.'];
-        sendJsonResponse($response);
-    }
-    
-    $username = trim($_POST['username'] ?? '');
-    $password = trim($_POST['password'] ?? '');
-    
-    $response = ['success' => false, 'message' => ''];
-    
-    if (empty($username) || empty($password)) {
-        $response['message'] = "Username and password are required";
-    } elseif (strlen($username) > 50 || strlen($password) > 100) {
-        $response['message'] = "Input length exceeds maximum allowed";
-    } elseif (!preg_match('/^[a-zA-Z0-9_\-@.]+$/', $username)) {
-        $response['message'] = "Invalid username format";
-    } else { 
-        // Logic check: Verify credentials
-        $usernameValid = hash_equals($username, $valid_username);
-        $passwordValid = hash_equals($password, $valid_password);
+    try {
+        $csrfToken = $_POST['csrf_token'] ?? '';
+        $sessionCsrfToken = $_SESSION['csrf_token'] ?? '';
         
-        if ($usernameValid && $passwordValid) {
+        if (empty($csrfToken) || !hash_equals($sessionCsrfToken, $csrfToken)) {
+            throw new Exception('Invalid security token. Please refresh the page.');
+        }
+        
+        $username = trim($_POST['username'] ?? '');
+        $password = trim($_POST['password'] ?? '');
+        
+        if (empty($username) || empty($password)) {
+            throw new Exception("Username and password are required.");
+        }
+
+        if (hash_equals($username, $valid_username) && hash_equals($password, $valid_password)) {
             session_regenerate_id(true);
             
             $_SESSION['user_id'] = bin2hex(random_bytes(16));
             $_SESSION['username'] = htmlspecialchars($username, ENT_QUOTES, 'UTF-8');
             $_SESSION['logged_in'] = true;
-            $_SESSION['login_time'] = time();
             $_SESSION['last_activity'] = time();
-            
-            $_SESSION['fingerprint'] = hash('sha256', 
-                $_SERVER['HTTP_USER_AGENT'] . 
-                (isset($_SERVER['HTTP_ACCEPT_LANGUAGE']) ? $_SERVER['HTTP_ACCEPT_LANGUAGE'] : '') .
-                $_SERVER['REMOTE_ADDR']
-            );
-            
+            $_SESSION['fingerprint'] = hash('sha256', $_SERVER['HTTP_USER_AGENT'] . ($_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? '') . $_SERVER['REMOTE_ADDR']);
             $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
             
             setcookie(session_name(), session_id(), [
                 'expires' => time() + 1800,
                 'path' => '/',
-                'domain' => '',
                 'secure' => true,
                 'httponly' => true,
                 'samesite' => 'Strict'
             ]);
             
-            $response['success'] = true;
-            $response['redirect'] = 'dash.php';
+            $response = ['success' => true, 'redirect' => 'dash.php'];
         } else {
-            // Failed login - No counter, just a generic error
-            $response['message'] = "Invalid credentials. Please try again.";
-            
-            // Keeping a small random delay is still good practice to hinder 
-            // automated bots, even without a hard lockout.
             usleep(random_int(100000, 300000));
+            throw new Exception("Invalid credentials. Please try again.");
         }
+    } catch (Exception $e) {
+        $response['message'] = $e->getMessage();
     }
     
-    sendJsonResponse($response);
+    // Clear buffer and send JSON
+    ob_clean();
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode($response);
+    exit;
 }
 
-// ==================== INITIALIZE NEW SESSION ====================
-if (!isset($_SESSION['csrf_token'])) {
+// INITIALIZE TOKEN
+if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-}
-
-$error = $_SESSION['login_error'] ?? '';
-unset($_SESSION['login_error']);
-
-// ==================== HELPER FUNCTIONS ====================
-function sendJsonResponse($response) {
-    if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && 
-        strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
-        header('Content-Type: application/json; charset=utf-8');
-        echo json_encode($response);
-        exit;
-    } else {
-        if (!$response['success']) {
-            $_SESSION['login_error'] = $response['message'];
-            header('Location: ' . htmlspecialchars($_SERVER['PHP_SELF'], ENT_QUOTES, 'UTF-8'));
-            exit;
-        } else {
-            header('Location: dash.php');
-            exit;
-        }
-    }
 }
 ?>
 <!DOCTYPE html>
@@ -577,12 +560,6 @@ function sendJsonResponse($response) {
             color: #4CAF50;
         }
 
-        .alert.warning {
-            background-color: rgba(255, 193, 7, 0.1);
-            border: 1px solid rgba(255, 193, 7, 0.3);
-            color: #ffc107;
-        }
-
         .cinzel {
             font-family: 'Cinzel Decorative', serif;
             font-weight: 900;
@@ -607,8 +584,6 @@ function sendJsonResponse($response) {
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
-
-         
 
         /* Responsive Design */
         @media (max-width: 768px) {
@@ -651,60 +626,47 @@ function sendJsonResponse($response) {
             10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
             20%, 40%, 60%, 80% { transform: translateX(5px); }
         }
-
-        
     </style>
 </head>
 
 <body>
-    <!-- Red particles overlay -->
     <div class="particles-overlay" id="particles"></div> 
 
-    <!-- Header -->
     <header class="login-header">
-        <a href="https://echotongue.dsintertravel.com" class="cinzel">
-            Echotongue
-        </a>
+        <a href="https://echotongue.dsintertravel.com" class="cinzel">Echotongue</a>
         <a href="https://echotongue.dsintertravel.com" class="back-home">
             <i class="fas fa-arrow-left"></i>
             <span>Back to Main Site</span>
         </a>
     </header>
         
-    <!-- Login Container -->
     <div class="login-container">
-        <!-- Decorative corners -->
         <div class="corner-decor tl"></div>
         <div class="corner-decor tr"></div>
         <div class="corner-decor bl"></div>
         <div class="corner-decor br"></div>
         
-        <!-- Login Header -->
         <div class="login-header-inner">
             <h1 class="login-title">ACCESS PORTAL</h1>
             <p class="login-subtitle">Enter your credentials to enter the Universe</p> 
         </div>
 
-        
-        <!-- Error/Success Messages -->
         <div class="alert error" id="errorAlert">
-            <i class="fas fa-exclamation-circle"></i> <span id="errorText">Invalid username or password. Please try again.</span>
+            <i class="fas fa-exclamation-circle"></i> <span id="errorText">Invalid credentials.</span>
         </div>
 
         <div class="alert success" id="successAlert">
             <i class="fas fa-check-circle"></i> Login successful! Redirecting...
         </div>
 
-        <!-- Login Form -->
         <form class="login-form" id="loginForm" autocomplete="off">
-            <!-- CSRF Token -->
             <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8'); ?>">
             
             <div class="form-group">
                 <label class="form-label" for="username">Username</label>
                 <div class="input-with-icon">
                     <i class="fas fa-user input-icon"></i>
-                    <input type="text" id="username" name="username" class="form-input" placeholder="Enter username" autocomplete="username" required>
+                    <input type="text" id="username" name="username" class="form-input" placeholder="Enter username" required>
                 </div>
             </div>
 
@@ -712,7 +674,7 @@ function sendJsonResponse($response) {
                 <label class="form-label" for="password">Password</label>
                 <div class="input-with-icon">
                     <i class="fas fa-lock input-icon"></i>
-                    <input type="password" id="password" name="password" class="form-input" placeholder="Enter password" autocomplete="current-password" required>
+                    <input type="password" id="password" name="password" class="form-input" placeholder="Enter password" required>
                     <button type="button" class="password-toggle" id="passwordToggle" aria-label="Show password">
                         <i class="far fa-eye"></i>
                     </button>
@@ -725,31 +687,21 @@ function sendJsonResponse($response) {
         </form>
     </div>
 
-    <!-- Custom Cursor -->
     <div class="cursor-dot" id="cursor-dot"></div>
     <div class="cursor-outline" id="cursor-outline"></div>
 
    <script>
-        // ==================== INITIALIZATION ====================
         document.addEventListener('DOMContentLoaded', function() {
             createParticles();
             setupEventListeners(); 
-            
-            // Show security warning in development
-            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-                document.getElementById('securityWarning').style.display = 'block';
-            }
         });
 
-        // ==================== PARTICLE EFFECT ====================
         function createParticles() {
             const particlesContainer = document.getElementById('particles');
             const particleCount = 30;
-
             for (let i = 0; i < particleCount; i++) {
                 const particle = document.createElement('div');
                 particle.classList.add('particle');
-
                 const size = Math.random() * 6 + 2;
                 particle.style.width = `${size}px`;
                 particle.style.height = `${size}px`;
@@ -758,15 +710,12 @@ function sendJsonResponse($response) {
                 particle.style.opacity = Math.random() * 0.5 + 0.1;
                 particle.style.animationDelay = `${Math.random() * 5}s`;
                 particle.style.animationDuration = `${Math.random() * 5 + 3}s`;
-
                 particlesContainer.appendChild(particle);
             }
         }
 
-        // ==================== CUSTOM CURSOR ====================
         const cursorDot = document.getElementById('cursor-dot');
         const cursorOutline = document.getElementById('cursor-outline');
-
         document.addEventListener('mousemove', (e) => {
             cursorDot.style.left = `${e.clientX}px`;
             cursorDot.style.top = `${e.clientY}px`;
@@ -774,20 +723,6 @@ function sendJsonResponse($response) {
             cursorOutline.style.top = `${e.clientY}px`;
         });
 
-        const interactiveElements = document.querySelectorAll('button, a, input, .password-toggle');
-        interactiveElements.forEach(el => {
-            el.addEventListener('mouseenter', () => {
-                cursorDot.style.transform = 'translate(-50%, -50%) scale(1.5)';
-                cursorOutline.style.transform = 'translate(-50%, -50%) scale(1.2)';
-            });
-
-            el.addEventListener('mouseleave', () => {
-                cursorDot.style.transform = 'translate(-50%, -50%) scale(1)';
-                cursorOutline.style.transform = 'translate(-50%, -50%) scale(1)';
-            });
-        });
-
-        // ==================== PASSWORD VISIBILITY TOGGLE ====================
         function setupEventListeners() {
             const passwordToggle = document.getElementById('passwordToggle');
             const passwordInput = document.getElementById('password');
@@ -795,140 +730,66 @@ function sendJsonResponse($response) {
             passwordToggle.addEventListener('click', () => {
                 const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
                 passwordInput.setAttribute('type', type);
-                
                 const icon = passwordToggle.querySelector('i');
                 icon.classList.toggle('fa-eye');
                 icon.classList.toggle('fa-eye-slash');
-                
-                passwordToggle.setAttribute('aria-label', 
-                    type === 'text' ? 'Hide password' : 'Show password'
-                );
             });
 
             document.getElementById('loginForm').addEventListener('submit', handleLoginSubmit);
         }
 
-        // ==================== LOGIN HANDLING ====================
-        async function handleLoginSubmit(e) {
-            e.preventDefault();
+      async function handleLoginSubmit(e) {
+    e.preventDefault();
+    const errorAlert = document.getElementById('errorAlert');
+    const successAlert = document.getElementById('successAlert');
+    const submitBtn = document.getElementById('submitBtn');
+    const form = e.target;
 
-            document.getElementById('errorAlert').style.display = 'none';
-            document.getElementById('successAlert').style.display = 'none'; 
+    errorAlert.style.display = 'none';
+    successAlert.style.display = 'none'; 
 
-            const form = e.target;
-            const formData = new FormData(form);
-            
-            const username = formData.get('username').trim();
-            const password = formData.get('password').trim();
-            
-            if (!username || !password) {
-                showError('Username and password are required');
-                return;
-            }
-           
+    const formData = new FormData(form);
+    const originalText = submitBtn.innerHTML;
+    
+    // 1. Start Spinner
+    submitBtn.innerHTML = '<span class="spinner"></span> SIGNING IN...';
+    submitBtn.disabled = true;
 
-            const submitBtn = document.getElementById('submitBtn');
-            const originalText = submitBtn.innerHTML;
-            submitBtn.innerHTML = '<span class="spinner"></span> SIGNING IN...';
-            submitBtn.disabled = true;
+    try {
+        const response = await fetch('', {
+            method: 'POST',
+            body: formData,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
 
-            try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 15000); 
-                
-                const response = await fetch('', {
-                    method: 'POST',
-                    body: formData,
-                    headers: {
-                        'X-Requested-With': 'XMLHttpRequest'
-                    },
-                    signal: controller.signal
-                });
-                
-                clearTimeout(timeoutId);
+        if (!response.ok) throw new Error(`Server Error: ${response.status}`);
 
-                if (!response.ok) {
-                    showError('Server error. Please try again.');
-                    return;
-                }
+        const result = await response.json();
 
-                const contentType = response.headers.get("content-type");
-                if (contentType && contentType.includes("application/json")) {
-                    const result = await response.json();
-
-                    if (result.success) {
-                        showSuccess();
-                        form.reset();
-                        
-                        // Redirect
-                        setTimeout(() => {
-                            window.location.href = result.redirect || 'dash.php';
-                        }, 1000);
-                    } else {
-                        showError(result.message);
-                        
-                        // Clear password field
-                        document.getElementById('password').value = '';
-                        
-                        // Shake animation
-                        form.style.animation = 'shake 0.5s';
-                        setTimeout(() => form.style.animation = '', 500);
-                    }
-                } else {
-                    window.location.reload();
-                }
-            } catch (error) {
-                if (error.name === 'AbortError') {
-                    showError('Request timeout. Please try again.');
-                } else {
-                    showError('A network error occurred. Please check your connection.');
-                }
-                console.error('Login error:', error);
-            } finally {
-                submitBtn.innerHTML = originalText;
-                submitBtn.disabled = false;
-            }
+        if (result.success) {
+            successAlert.style.display = 'flex';
+            // 2. Success: We do NOT reset the button. 
+            // The spinner stays until the page actually changes.
+            setTimeout(() => { window.location.href = result.redirect || 'dash.php'; }, 1000);
+            return; // Exit early to avoid the "finally" block logic
+        } else {
+            showError(result.message);
+            form.style.animation = 'shake 0.5s';
+            setTimeout(() => form.style.animation = '', 500);
         }
+    } catch (error) {
+        showError(error.name === 'SyntaxError' ? 'Critical server error. Invalid response.' : 'Connection error. Please try again.');
+    } 
 
+    // 3. Reset Button (Only runs if login failed or caught an error)
+    submitBtn.innerHTML = originalText;
+    submitBtn.disabled = false;
+}
         function showError(message) {
             const errorAlert = document.getElementById('errorAlert');
-            const errorText = document.getElementById('errorText');
-            errorText.textContent = message;
+            document.getElementById('errorText').textContent = message;
             errorAlert.style.display = 'flex';
         }
-
-        function showSuccess() {
-            document.getElementById('successAlert').style.display = 'flex';  
-        }
-
-        // ==================== KEYBOARD SHORTCUTS ====================
-        document.addEventListener('keydown', (e) => {
-            if (e.ctrlKey && e.key === 'Enter') {
-                document.getElementById('loginForm').requestSubmit();
-            }
-            
-            if (e.key === 'Escape') {
-                document.getElementById('loginForm').reset();
-                document.getElementById('errorAlert').style.display = 'none';
-                // rateLimitWarning check removed
-            }
-        });
-
-        // ==================== INPUT VALIDATION ====================
-        document.getElementById('username').addEventListener('input', function(e) {
-            if (this.value.length > 50) {
-                this.value = this.value.substring(0, 50);
-            }
-            if (!/^[a-zA-Z0-9_\-@.]*$/.test(this.value)) {
-                this.value = this.value.slice(0, -1);
-            }
-        });
-
-        document.getElementById('password').addEventListener('input', function(e) {
-            if (this.value.length > 100) {
-                this.value = this.value.substring(0, 100);
-            }
-        });
     </script>
 </body> 
 </html>
