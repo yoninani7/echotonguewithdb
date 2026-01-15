@@ -1,21 +1,14 @@
 <?php
 /**
  * ECHO TONGUE - LOGIN PORTAL
- * Optimized for Error Handling and Efficiency
  */
 
-// 1. GLOBAL ERROR HANDLING - Ensures PHP errors don't break AJAX responses
-ob_start(); 
+// 1. GLOBAL ERROR HANDLING
+ob_start();
 error_reporting(E_ALL);
 
-set_exception_handler(function ($e) {
-    handleGlobalError("System Exception: " . $e->getMessage());
-});
-
-set_error_handler(function ($errno, $errstr, $errfile, $errline) {
-    if (!(error_reporting() & $errno)) return;
-    handleGlobalError("PHP Error: $errstr");
-});
+set_exception_handler(function ($e) { handleGlobalError("System Exception: " . $e->getMessage()); });
+set_error_handler(function ($errno, $errstr) { if (!(error_reporting() & $errno)) return; handleGlobalError("PHP Error: $errstr"); });
 
 function handleGlobalError($msg) {
     ob_clean();
@@ -24,45 +17,47 @@ function handleGlobalError($msg) {
         echo json_encode(['success' => false, 'message' => $msg]);
         exit;
     }
-    // For non-ajax, just let it fail gracefully
     die($msg);
 }
 
-// 2. SESSION & SECURITY HEADERS
-try {
-    if (session_status() === PHP_SESSION_NONE) {
-        session_start();
-    }
-} catch (Exception $e) {
-    handleGlobalError("Session failed to initialize.");
+// 2. SESSION & SECURITY (FIXED)
+$isSecure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
+session_set_cookie_params([
+    'lifetime' => 1800,
+    'path' => '/',
+    'secure' => $isSecure, 
+    'httponly' => true,
+    'samesite' => 'Strict'
+]);
+
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
 }
 
 header("X-Frame-Options: DENY");
 header("X-Content-Type-Options: nosniff");
-header("X-XSS-Protection: 1; mode=block");
-header("Referrer-Policy: strict-origin-when-cross-origin");
 
 // HTTPS Enforcement
-if (empty($_SERVER['HTTPS']) && $_SERVER['HTTP_HOST'] !== 'localhost' && $_SERVER['HTTP_HOST'] !== '127.0.0.1') {
+if (!$isSecure && $_SERVER['HTTP_HOST'] !== 'localhost' && $_SERVER['HTTP_HOST'] !== '127.0.0.1') {
     header("Location: https://" . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI']);
     exit();
 }
 
 // 3. CREDENTIALS
 $valid_username = 'hermona';
-$valid_password = 'shakespeare'; 
+$valid_password = 'shakespeare';
 
 // 4. SESSION VALIDATION
 if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) {
     $currentFingerprint = hash('sha256', $_SERVER['HTTP_USER_AGENT'] . ($_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? '') . $_SERVER['REMOTE_ADDR']);
-    
+
     if (hash_equals($_SESSION['fingerprint'] ?? '', $currentFingerprint)) {
         if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 1800)) {
             session_destroy();
             header('Location: ' . $_SERVER['PHP_SELF']);
             exit;
         }
-        
+
         $_SESSION['last_activity'] = time();
         if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['HTTP_X_REQUESTED_WITH'])) {
             echo json_encode(['success' => true, 'redirect' => 'dash.php']);
@@ -78,40 +73,33 @@ if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) {
 // 5. LOGIN HANDLING
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $response = ['success' => false, 'message' => 'An unknown error occurred.'];
-    
+
     try {
         $csrfToken = $_POST['csrf_token'] ?? '';
         $sessionCsrfToken = $_SESSION['csrf_token'] ?? '';
-        
+
         if (empty($csrfToken) || !hash_equals($sessionCsrfToken, $csrfToken)) {
             throw new Exception('Invalid security token. Please refresh the page.');
         }
-        
+
         $username = trim($_POST['username'] ?? '');
         $password = trim($_POST['password'] ?? '');
-        
+
         if (empty($username) || empty($password)) {
             throw new Exception("Username and password are required.");
         }
 
         if (hash_equals($username, $valid_username) && hash_equals($password, $valid_password)) {
             session_regenerate_id(true);
-            
+
             $_SESSION['user_id'] = bin2hex(random_bytes(16));
             $_SESSION['username'] = htmlspecialchars($username, ENT_QUOTES, 'UTF-8');
             $_SESSION['logged_in'] = true;
             $_SESSION['last_activity'] = time();
             $_SESSION['fingerprint'] = hash('sha256', $_SERVER['HTTP_USER_AGENT'] . ($_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? '') . $_SERVER['REMOTE_ADDR']);
             $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-            
-            setcookie(session_name(), session_id(), [
-                'expires' => time() + 1800,
-                'path' => '/',
-                'secure' => true,
-                'httponly' => true,
-                'samesite' => 'Strict'
-            ]);
-            
+ 
+
             $response = ['success' => true, 'redirect' => 'dash.php'];
         } else {
             usleep(random_int(100000, 300000));
@@ -120,7 +108,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } catch (Exception $e) {
         $response['message'] = $e->getMessage();
     }
-    
+
     // Clear buffer and send JSON
     ob_clean();
     header('Content-Type: application/json; charset=utf-8');
@@ -139,12 +127,14 @@ if (empty($_SESSION['csrf_token'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login | Echotongue</title> 
+    <title>Login | Echotongue</title>
     <link rel="stylesheet" href="fontawesome-free-7.1.0-web/css/all.min.css">
     <link rel="icon" href="echologo.png" sizes="32x32" type="image/x-icon">
     <link rel="apple-touch-icon" sizes="180x180" href="assets/echologo.png">
     <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Montserrat:wght@300;400;500;600&family=Orbitron:wght@400;500;600&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Montserrat:wght@300;400;500;600&family=Orbitron:wght@400;500;600&display=swap"
+        rel="stylesheet">
     <style>
         :root {
             --primary-red: #c91313c9;
@@ -216,12 +206,16 @@ if (empty($_SESSION['csrf_token'])) {
         }
 
         @keyframes float {
-            0%, 100% {
+
+            0%,
+            100% {
                 transform: translateY(0) translateX(0);
             }
+
             33% {
                 transform: translateY(-20px) translateX(10px);
             }
+
             66% {
                 transform: translateY(10px) translateX(-10px);
             }
@@ -300,6 +294,7 @@ if (empty($_SESSION['csrf_token'])) {
                 opacity: 0;
                 transform: translateY(30px);
             }
+
             to {
                 opacity: 1;
                 transform: translateY(0);
@@ -575,14 +570,16 @@ if (empty($_SESSION['csrf_token'])) {
             display: inline-block;
             width: 1em;
             height: 1em;
-            border: 2px solid rgba(255,255,255,.3);
+            border: 2px solid rgba(255, 255, 255, .3);
             border-radius: 50%;
             border-top-color: #fff;
             animation: spin 1s ease-in-out infinite;
         }
 
         @keyframes spin {
-            to { transform: rotate(360deg); }
+            to {
+                transform: rotate(360deg);
+            }
         }
 
         /* Responsive Design */
@@ -622,15 +619,32 @@ if (empty($_SESSION['csrf_token'])) {
 
         /* Shake animation for errors */
         @keyframes shake {
-            0%, 100% { transform: translateX(0); }
-            10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
-            20%, 40%, 60%, 80% { transform: translateX(5px); }
+
+            0%,
+            100% {
+                transform: translateX(0);
+            }
+
+            10%,
+            30%,
+            50%,
+            70%,
+            90% {
+                transform: translateX(-5px);
+            }
+
+            20%,
+            40%,
+            60%,
+            80% {
+                transform: translateX(5px);
+            }
         }
     </style>
 </head>
 
 <body>
-    <div class="particles-overlay" id="particles"></div> 
+    <div class="particles-overlay" id="particles"></div>
 
     <header class="login-header">
         <a href="https://echotongue.dsintertravel.com" class="cinzel">Echotongue</a>
@@ -639,16 +653,16 @@ if (empty($_SESSION['csrf_token'])) {
             <span>Back to Main Site</span>
         </a>
     </header>
-        
+
     <div class="login-container">
         <div class="corner-decor tl"></div>
         <div class="corner-decor tr"></div>
         <div class="corner-decor bl"></div>
         <div class="corner-decor br"></div>
-        
+
         <div class="login-header-inner">
             <h1 class="login-title">ACCESS PORTAL</h1>
-            <p class="login-subtitle">Enter your credentials to enter the Universe</p> 
+            <p class="login-subtitle">Enter your credentials to enter the Universe</p>
         </div>
 
         <div class="alert error" id="errorAlert">
@@ -660,13 +674,15 @@ if (empty($_SESSION['csrf_token'])) {
         </div>
 
         <form class="login-form" id="loginForm" autocomplete="off">
-            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8'); ?>">
-            
+            <input type="hidden" name="csrf_token"
+                value="<?php echo htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8'); ?>">
+
             <div class="form-group">
                 <label class="form-label" for="username">Username</label>
                 <div class="input-with-icon">
                     <i class="fas fa-user input-icon"></i>
-                    <input type="text" id="username" name="username" class="form-input" placeholder="Enter username" required>
+                    <input type="text" id="username" name="username" class="form-input" placeholder="Enter username"
+                        required>
                 </div>
             </div>
 
@@ -674,7 +690,8 @@ if (empty($_SESSION['csrf_token'])) {
                 <label class="form-label" for="password">Password</label>
                 <div class="input-with-icon">
                     <i class="fas fa-lock input-icon"></i>
-                    <input type="password" id="password" name="password" class="form-input" placeholder="Enter password" required>
+                    <input type="password" id="password" name="password" class="form-input" placeholder="Enter password"
+                        required>
                     <button type="button" class="password-toggle" id="passwordToggle" aria-label="Show password">
                         <i class="far fa-eye"></i>
                     </button>
@@ -690,10 +707,10 @@ if (empty($_SESSION['csrf_token'])) {
     <div class="cursor-dot" id="cursor-dot"></div>
     <div class="cursor-outline" id="cursor-outline"></div>
 
-   <script>
-        document.addEventListener('DOMContentLoaded', function() {
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
             createParticles();
-            setupEventListeners(); 
+            setupEventListeners();
         });
 
         function createParticles() {
@@ -738,58 +755,59 @@ if (empty($_SESSION['csrf_token'])) {
             document.getElementById('loginForm').addEventListener('submit', handleLoginSubmit);
         }
 
-      async function handleLoginSubmit(e) {
-    e.preventDefault();
-    const errorAlert = document.getElementById('errorAlert');
-    const successAlert = document.getElementById('successAlert');
-    const submitBtn = document.getElementById('submitBtn');
-    const form = e.target;
+        async function handleLoginSubmit(e) {
+            e.preventDefault();
+            const errorAlert = document.getElementById('errorAlert');
+            const successAlert = document.getElementById('successAlert');
+            const submitBtn = document.getElementById('submitBtn');
+            const form = e.target;
 
-    errorAlert.style.display = 'none';
-    successAlert.style.display = 'none'; 
+            errorAlert.style.display = 'none';
+            successAlert.style.display = 'none';
 
-    const formData = new FormData(form);
-    const originalText = submitBtn.innerHTML;
-    
-    // 1. Start Spinner
-    submitBtn.innerHTML = '<span class="spinner"></span> SIGNING IN...';
-    submitBtn.disabled = true;
+            const formData = new FormData(form);
+            const originalText = submitBtn.innerHTML;
 
-    try {
-        const response = await fetch('', {
-            method: 'POST',
-            body: formData,
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
-        });
+            // 1. Start Spinner
+            submitBtn.innerHTML = '<span class="spinner"></span> SIGNING IN...';
+            submitBtn.disabled = true;
 
-        if (!response.ok) throw new Error(`Server Error: ${response.status}`);
+            try {
+                const response = await fetch('', {
+                    method: 'POST',
+                    body: formData,
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                });
 
-        const result = await response.json();
+                if (!response.ok) throw new Error(`Server Error: ${response.status}`);
 
-        if (result.success) {
-            successAlert.style.display = 'flex';
-            // 2. Success: We do NOT reset the button. 
-            // The spinner stays until the page actually changes.
-            setTimeout(() => { window.location.href = result.redirect || 'dash.php'; }, 1000);
-            return; // Exit early to avoid the "finally" block logic
-        } else {
-            showError(result.message);
-            form.style.animation = 'shake 0.5s';
-            setTimeout(() => form.style.animation = '', 500);
+                const result = await response.json();
+
+                if (result.success) {
+                    successAlert.style.display = 'flex';
+                    // 2. Success: We do NOT reset the button. 
+                    // The spinner stays until the page actually changes.
+                    setTimeout(() => { window.location.href = result.redirect || 'dash.php'; }, 1000);
+                    return; // Exit early to avoid the "finally" block logic
+                } else {
+                    showError(result.message);
+                    form.style.animation = 'shake 0.5s';
+                    setTimeout(() => form.style.animation = '', 500);
+                }
+            } catch (error) {
+                showError(error.name === 'SyntaxError' ? 'Critical server error. Invalid response.' : 'Connection error. Please try again.');
+            }
+
+            // 3. Reset Button (Only runs if login failed or caught an error)
+            submitBtn.innerHTML = originalText;
+            submitBtn.disabled = false;
         }
-    } catch (error) {
-        showError(error.name === 'SyntaxError' ? 'Critical server error. Invalid response.' : 'Connection error. Please try again.');
-    } 
-
-    // 3. Reset Button (Only runs if login failed or caught an error)
-    submitBtn.innerHTML = originalText;
-    submitBtn.disabled = false;
-}
         function showError(message) {
             const errorAlert = document.getElementById('errorAlert');
             document.getElementById('errorText').textContent = message;
             errorAlert.style.display = 'flex';
         }
     </script>
-</body> 
+</body>
+
 </html>
