@@ -1,6 +1,4 @@
-<?php
-// db_connect.php
-
+<?php  
 $host = 'localhost';
 $username = 'root';
 $password = '';
