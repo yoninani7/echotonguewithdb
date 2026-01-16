@@ -688,7 +688,8 @@ if (isset($sql_count)) {
                     <i class="fas fa-bars"></i>
                 </button>
                 <h2 style="font-weight:700; font-family: 'Cinzel Decorative', sans-serif">
-                    <?php echo ucfirst($active_tab); ?></h2>
+                    <?php echo ucfirst($active_tab); ?>
+                </h2>
             </div>
         </div>
 
@@ -793,25 +794,25 @@ if (isset($sql_count)) {
 
         <!-- === FEEDBACKS TAB === -->
         <?php if ($active_tab === 'feedbacks'): ?>
-             <!-- NEW: Bulk Action Buttons -->
-    <div style="display:flex; justify-content:flex-end; gap:12px; margin-bottom:20px;">
-        <?php if ($stats['feedback'] > 0): ?>
-            <!-- Mark All Read Form -->
-            <form method="POST" onsubmit="return confirm('Mark all messages as read?');">
-                <input type="hidden" name="csrf_token" value="<?php echo generate_token(); ?>">
-                <input type="hidden" name="action" value="mark_all_read">
-                <input type="hidden" name="redirect_tab" value="feedbacks">
-                <button type="submit" class="btn btn-secondary">
-                    <i class="fas fa-check-double"></i> Mark All Read
-                </button>
-            </form>
+            <!-- NEW: Bulk Action Buttons -->
+            <div style="display:flex; justify-content:flex-end; gap:12px; margin-bottom:20px;">
+                <?php if ($stats['feedback'] > 0): ?>
+                    <!-- Mark All Read Form -->
+                    <form method="POST" id="markAllReadFormBulk">
+                        <input type="hidden" name="csrf_token" value="<?php echo generate_token(); ?>">
+                        <input type="hidden" name="action" value="mark_all_read">
+                        <input type="hidden" name="redirect_tab" value="feedbacks">
+                        <button type="button" class="btn btn-secondary" onclick="openMarkReadModal()">
+                            <i class="fas fa-check-double"></i> Mark All Read
+                        </button>
+                    </form>
 
-            <!-- Delete All Button (Triggers Modal) -->
-            <button type="button" class="btn btn-primary" onclick="openBulkDeleteModal()">
-                <i class="fas fa-dumpster"></i> Delete All
-            </button>
-        <?php endif; ?>
-    </div>
+                    <!-- Delete All Button (Triggers Modal) -->
+                    <button type="button" class="btn btn-primary" onclick="openBulkDeleteModal()">
+                        <i class="fas fa-dumpster"></i> Delete All
+                    </button>
+                <?php endif; ?>
+            </div>
             <div class="glass-card" style="padding:0">
                 <?php if (empty($data)): ?>
                     <div class="empty-state"><i class="fas fa-inbox"></i>
@@ -839,7 +840,8 @@ if (isset($sql_count)) {
                                         <td>
                                             <div style="font-weight:600"><?php echo sanitize($row['name']); ?></div>
                                             <div style="font-size:12px; color:var(--text-muted)">
-                                                <?php echo sanitize($row['email']); ?></div>
+                                                <?php echo sanitize($row['email']); ?>
+                                            </div>
                                         </td>
                                         <td style="color:#ffc107"><?php echo str_repeat('★', $row['rating']); ?></td>
                                         <!-- UPDATED: Removed PHP truncation and added CSS ellipsis -->
@@ -992,6 +994,26 @@ if (isset($sql_count)) {
             </div>
         </div>
     </div>
+    <!-- 4. Mark All Read Confirmation Modal -->
+    <div id="markReadModal"
+        style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.9); backdrop-filter:blur(5px); z-index:2000; align-items:center; justify-content:center;">
+        <div class="glass-card"
+            style="width:90%; max-width:400px; background:#151515; text-align:center; border: 1px solid rgba(46, 204, 113, 0.2);">
+            <div style="font-size:40px; color: #2ecc71; margin-bottom:15px;"><i class="fas fa-clipboard-check"></i>
+            </div>
+            <h3 style="margin-bottom:10px; color:#fff;">Mark everything as read?</h3>
+            <p style="color:#aaa; margin-bottom:25px;">This will update the status of all pending feedback messages to
+                "read".</p>
+
+            <div style="display:flex; justify-content:center; gap:15px;">
+                <button class="btn btn-secondary"
+                    onclick="document.getElementById('markReadModal').style.display='none'">Cancel</button>
+                <button class="btn btn-primary"
+                    style="background: linear-gradient(135deg, #2ecc71, #135830); border:none;"
+                    onclick="document.getElementById('markAllReadFormBulk').submit()">Yes, Mark All</button>
+            </div>
+        </div>
+    </div>
 
     <!-- Hidden Delete Form -->
     <form id="deleteForm" method="POST" style="display:none">
@@ -1047,41 +1069,46 @@ if (isset($sql_count)) {
             document.getElementById('del_type').value = type;
             document.getElementById('deleteModal').style.display = 'flex';
         }
- 
+
 
         // Close Modals on Outside Click
         window.onclick = function (event) {
             if (event.target.id === 'editModal') document.getElementById('editModal').style.display = 'none';
             if (event.target.id === 'viewModal') document.getElementById('viewModal').style.display = 'none';
             if (event.target.id === 'deleteModal') document.getElementById('deleteModal').style.display = 'none';
+            if (event.target.id === 'markReadModal') document.getElementById('markReadModal').style.display = 'none'; // Added this line
         }
         // Add this to your existing script block
-function openBulkDeleteModal() {
-    // We reuse your existing delete logic but change the hidden fields
-    document.getElementById('del_id').value = 'all'; // Special ID for bulk
-    document.getElementById('del_type').value = 'feedback';
-    
-    // Update the modal text temporarily for bulk action
-    const modalTitle = document.querySelector('#deleteModal h3');
-    const modalPara = document.querySelector('#deleteModal p');
-    
-    modalTitle.innerText = "Delete ALL Feedback?";
-    modalPara.innerText = "This will permanently erase every feedback entry in the database.";
-    
-    document.getElementById('deleteModal').style.display = 'flex';
-}
+        function openBulkDeleteModal() {
+            // We reuse your existing delete logic but change the hidden fields
+            document.getElementById('del_id').value = 'all'; // Special ID for bulk
+            document.getElementById('del_type').value = 'feedback';
 
-// Update your confirmDeleteAction to handle the bulk 'action' name
-function confirmDeleteAction() {
-    const id = document.getElementById('del_id').value;
-    const form = document.getElementById('deleteForm');
-    
-    if (id === 'all') {
-        form.querySelector('input[name="action"]').value = 'delete_all_feedback';
-    }
-    
-    form.submit();
-}
+            // Update the modal text temporarily for bulk action
+            const modalTitle = document.querySelector('#deleteModal h3');
+            const modalPara = document.querySelector('#deleteModal p');
+
+            modalTitle.innerText = "Delete ALL Feedback?";
+            modalPara.innerText = "This will permanently erase every feedback entry in the database.";
+
+            document.getElementById('deleteModal').style.display = 'flex';
+        }
+
+        // Update your confirmDeleteAction to handle the bulk 'action' name
+        function confirmDeleteAction() {
+            const id = document.getElementById('del_id').value;
+            const form = document.getElementById('deleteForm');
+
+            if (id === 'all') {
+                form.querySelector('input[name="action"]').value = 'delete_all_feedback';
+            }
+
+            form.submit();
+        }
+
+        function openMarkReadModal() {
+            document.getElementById('markReadModal').style.display = 'flex';
+        }
     </script>
 </body>
 
