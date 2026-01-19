@@ -670,7 +670,7 @@ if (isset($sql_count)) {
             <a href="?tab=newsletter" class="nav-item <?php echo $active_tab === 'newsletter' ? 'active' : ''; ?>">
                 <i class="fas fa-envelope"></i> Newsletter
             </a>
-            <a href="https://echotongue.dsintertravel.com/" target="_blank" class="nav-item">
+            <a href="https://echotongue.com" target="_blank" class="nav-item">
                 <i class="fa fa-external-link" aria-hidden="true"></i>Visit site
             </a>
         </div>
