@@ -647,8 +647,8 @@ if (empty($_SESSION['csrf_token'])) {
     <div class="particles-overlay" id="particles"></div>
 
     <header class="login-header">
-        <a href="https://echotongue.dsintertravel.com" class="cinzel">Echotongue</a>
-        <a href="https://echotongue.dsintertravel.com" class="back-home">
+        <a href="https://echotongue.com" class="cinzel">Echotongue</a>
+        <a href="https://echotongue.com" class="back-home">
             <i class="fas fa-arrow-left"></i>
             <span>Back to Main Site</span>
         </a>
