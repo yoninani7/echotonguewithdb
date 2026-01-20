@@ -347,15 +347,17 @@ if (isset($sql_count)) {
             font-size: 13px;
         }
 
-        /* Tables */
+        /* UPDATED: TABLE RESPONSIVENESS */
         .table-container {
-            overflow-x: auto;
+            width: 100%;
+            overflow-x: auto; /* Enable horizontal scroll */
+            -webkit-overflow-scrolling: touch; /* Smooth scroll for mobile */
         }
 
         table {
             width: 100%;
             border-collapse: collapse;
-            min-width: 700px;
+            min-width: 600px; /* Force scroll on narrow screens */
         }
 
         th {
@@ -558,7 +560,7 @@ if (isset($sql_count)) {
             transform: translateX(0);
         }
 
-        /* Mobile */
+        /* Layout Mobile */
         .mobile-toggle {
             display: none;
             background: none;
@@ -588,22 +590,24 @@ if (isset($sql_count)) {
             }
 
             .stats-grid {
-                grid-template-columns: 1fr;
-            }
-
-            td:nth-child(3),
-            th:nth-child(3) {
-                display: none;
+                grid-template-columns: repeat(2, 1fr);
             }
         }
 
         @media(max-width: 600px) {
-            .auth {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            /* Hide specific columns on small mobile to save space */
+            .hide-mobile {
                 display: none;
             }
-
         }
-
+         @media(max-width: 500px) {
+            #thebuttonscp{ 
+                width: 100%;   
+            } 
+        }
         .user-info {
             text-align: center;
             margin-bottom: 30px;
@@ -626,11 +630,11 @@ if (isset($sql_count)) {
         .user-name {
             font-family: 'Cinzel', serif;
             font-size: 1.2rem;
-            color: var(--text-white);
+            color: #fff;
         }
 
         .user-role {
-            color: var(--primary-red);
+            color: var(--primary);
             font-size: 0.8rem;
             text-transform: uppercase;
             letter-spacing: 2px;
@@ -738,13 +742,12 @@ if (isset($sql_count)) {
                     <textarea name="thought_text" id="newThoughtText" class="thought-input"
                         placeholder="What is on your mind today?" required></textarea>
 
-                    <!-- Improved Buttons -->
-                    <div style="display:flex; gap:12px; justify-content:flex-end;">
-                        <button type="button" class="btn btn-secondary"
+                    <div style="display:flex; gap:12px; justify-content:flex-end; flex-wrap:wrap;">
+                        <button type="button" class="btn btn-secondary" id="thebuttonscp"
                             onclick="document.getElementById('newThoughtText').value = ''">
                             <i class="fas fa-eraser"></i> Clear
                         </button>
-                        <button type="submit" class="btn btn-primary" style="padding-left:30px; padding-right:30px;">
+                        <button type="submit" class="btn btn-primary" id="thebuttonscp" style="padding-left:30px; padding-right:30px;">
                             <i class="fas fa-paper-plane"></i> Publish thought
                         </button>
                     </div>
@@ -753,17 +756,16 @@ if (isset($sql_count)) {
 
             <div class="glass-card" style="padding:0">
                 <?php if (empty($data)): ?>
-                    <!-- Empty State -->
                     <div class="empty-state">
                         <i class="fas fa-wind"></i>
-                        <p>No thoughts added yet. Start writing above!</p>
+                        <p>No thoughts added yet.</p>
                     </div>
                 <?php else: ?>
                     <div class="table-container">
                         <table>
                             <thead>
                                 <tr>
-                                    <th>Published Date</th>
+                                    <th class="hide-mobile">Date</th>
                                     <th>Content</th>
                                     <th style="text-align:right">Actions</th>
                                 </tr>
@@ -771,13 +773,12 @@ if (isset($sql_count)) {
                             <tbody>
                                 <?php foreach ($data as $row): ?>
                                     <tr>
-                                        <!-- Full Date Format -->
-                                        <td style="white-space:nowrap; color:var(--text-muted); font-size:13px;">
-                                            <?php echo date('M j, Y, g:i a', strtotime($row['thought_date'])); ?>
+                                        <td class="hide-mobile" style="white-space:nowrap; color:var(--text-muted); font-size:13px;">
+                                            <?php echo date('M j, Y', strtotime($row['thought_date'])); ?>
                                         </td>
                                         <td><?php echo nl2br(substr(sanitize($row['thought_text']), 0, 100)) . (strlen($row['thought_text']) > 100 ? '...' : ''); ?>
                                         </td>
-                                        <td style="text-align:right">
+                                        <td style="text-align:right; white-space:nowrap;">
                                             <button class="btn btn-icon"
                                                 onclick="openModal('edit', <?php echo htmlspecialchars(json_encode($row)); ?>)"><i
                                                     class="fas fa-edit"></i></button>
@@ -796,20 +797,11 @@ if (isset($sql_count)) {
 
         <!-- === FEEDBACKS TAB === -->
         <?php if ($active_tab === 'feedbacks'): ?>
-            <!-- NEW: Bulk Action Buttons -->
-            <div style="display:flex; justify-content:flex-end; gap:12px; margin-bottom:20px;">
+            <div style="display:flex; justify-content:flex-end; gap:12px; margin-bottom:20px; flex-wrap:wrap;">
                 <?php if ($stats['feedback'] > 0): ?>
-                    <!-- Mark All Read Form -->
-                    <form method="POST" id="markAllReadFormBulk">
-                        <input type="hidden" name="csrf_token" value="<?php echo generate_token(); ?>">
-                        <input type="hidden" name="action" value="mark_all_read">
-                        <input type="hidden" name="redirect_tab" value="feedbacks">
-                        <button type="button" class="btn btn-secondary" onclick="openMarkReadModal()">
-                            <i class="fas fa-check-double"></i> Mark All Read
-                        </button>
-                    </form>
-
-                    <!-- Delete All Button (Triggers Modal) -->
+                    <button type="button" class="btn btn-secondary" onclick="openMarkReadModal()">
+                        <i class="fas fa-check-double"></i> Mark All Read
+                    </button>
                     <button type="button" class="btn btn-primary" onclick="openBulkDeleteModal()">
                         <i class="fas fa-dumpster"></i> Delete All
                     </button>
@@ -825,12 +817,11 @@ if (isset($sql_count)) {
                         <table>
                             <thead>
                                 <tr>
-                                    <th style="width:10%">Status</th>
-                                    <th style="width:25%">User</th>
-                                    <th style="width:10%">Rating</th>
-                                    <!-- Increased Width for Message -->
-                                    <th style="width:45%">Message</th>
-                                    <th style="width:10%; text-align:right">Actions</th>
+                                    <th>Status</th>
+                                    <th>User</th>
+                                    <th class="hide-mobile">Rating</th>
+                                    <th>Message</th>
+                                    <th style="text-align:right">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -841,16 +832,13 @@ if (isset($sql_count)) {
                                         </td>
                                         <td>
                                             <div style="font-weight:600"><?php echo sanitize($row['name']); ?></div>
-                                            <div style="font-size:12px; color:var(--text-muted)">
-                                                <?php echo sanitize($row['email']); ?>
-                                            </div>
+                                            <div style="font-size:12px; color:var(--text-muted)"><?php echo sanitize($row['email']); ?></div>
                                         </td>
-                                        <td style="color:#ffc107"><?php echo str_repeat('★', $row['rating']); ?></td>
-                                        <!-- UPDATED: Removed PHP truncation and added CSS ellipsis -->
+                                        <td class="hide-mobile" style="color:#ffc107"><?php echo str_repeat('★', $row['rating']); ?></td>
                                         <td>
                                             <div class="text-ellipsis"><?php echo sanitize($row['message']); ?></div>
                                         </td>
-                                        <td style="text-align:right">
+                                        <td style="text-align:right; white-space:nowrap;">
                                             <button class="btn btn-icon"
                                                 onclick="openModal('view', <?php echo htmlspecialchars(json_encode($row)); ?>)"><i
                                                     class="fas fa-eye"></i></button>
@@ -873,14 +861,7 @@ if (isset($sql_count)) {
                 <form method="POST">
                     <input type="hidden" name="csrf_token" value="<?php echo generate_token(); ?>">
                     <input type="hidden" name="action" value="export_csv">
-
-                    <!-- Disabled Button Logic -->
-                    <?php if ($stats['subs'] > 0): ?>
-                        <button class="btn btn-primary"><i class="fas fa-download"></i> Export CSV</button>
-                    <?php else: ?>
-                        <button type="button" class="btn btn-disabled" disabled title="No subscribers to export"><i
-                                class="fas fa-download"></i> Export CSV</button>
-                    <?php endif; ?>
+                    <button class="btn btn-primary" <?php echo ($stats['subs'] == 0) ? 'disabled' : ''; ?>><i class="fas fa-download"></i> Export CSV</button>
                 </form>
             </div>
 
@@ -894,7 +875,7 @@ if (isset($sql_count)) {
                         <table>
                             <thead>
                                 <tr>
-                                    <th>ID</th>
+                                    <th class="hide-mobile">ID</th>
                                     <th>Email</th>
                                     <th>Subscribed</th>
                                     <th style="text-align:right">Actions</th>
@@ -903,10 +884,10 @@ if (isset($sql_count)) {
                             <tbody>
                                 <?php foreach ($data as $row): ?>
                                     <tr>
-                                        <td style="color:var(--text-muted)">#<?php echo $row['id']; ?></td>
+                                        <td class="hide-mobile" style="color:var(--text-muted)">#<?php echo $row['id']; ?></td>
                                         <td style="font-family:monospace;"><?php echo sanitize($row['email']); ?></td>
                                         <td><?php echo date('M j, Y', strtotime($row['date_subscribed'])); ?></td>
-                                        <td style="text-align:right">
+                                        <td style="text-align:right; white-space:nowrap;">
                                             <button class="btn btn-icon"
                                                 onclick="copyText('<?php echo sanitize($row['email']); ?>')"><i
                                                     class="fas fa-copy"></i></button>
@@ -937,8 +918,7 @@ if (isset($sql_count)) {
 
     </main>
 
-    <!-- === MODALS === -->
-
+    <!-- MODALS -->
     <!-- 1. Edit Thought Modal -->
     <div id="editModal"
         style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.8); backdrop-filter:blur(5px); z-index:1000; align-items:center; justify-content:center;">
@@ -978,7 +958,7 @@ if (isset($sql_count)) {
         </div>
     </div>
 
-    <!-- 3. NEW CUSTOM DELETE MODAL -->
+    <!-- 3. Delete Modal -->
     <div id="deleteModal"
         style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.9); backdrop-filter:blur(5px); z-index:2000; align-items:center; justify-content:center;">
         <div class="glass-card"
@@ -986,9 +966,7 @@ if (isset($sql_count)) {
             <div style="font-size:40px; color: #c90202; margin-bottom:15px;"><i class="fas fa-exclamation-triangle"></i>
             </div>
             <h3 style="margin-bottom:10px; color:#fff;">Are you sure?</h3>
-            <p style="color:#aaa; margin-bottom:25px;">This action cannot be undone. Do you really want to delete this?
-            </p>
-
+            <p style="color:#aaa; margin-bottom:25px;">This action cannot be undone.</p>
             <div style="display:flex; justify-content:center; gap:15px;">
                 <button class="btn btn-secondary"
                     onclick="document.getElementById('deleteModal').style.display='none'">Cancel</button>
@@ -996,23 +974,24 @@ if (isset($sql_count)) {
             </div>
         </div>
     </div>
-    <!-- 4. Mark All Read Confirmation Modal -->
+
+    <!-- 4. Mark Read Modal -->
     <div id="markReadModal"
         style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.9); backdrop-filter:blur(5px); z-index:2000; align-items:center; justify-content:center;">
         <div class="glass-card"
             style="width:90%; max-width:400px; background:#151515; text-align:center; border: 1px solid rgba(46, 204, 113, 0.2);">
             <div style="font-size:40px; color: #2ecc71; margin-bottom:15px;"><i class="fas fa-clipboard-check"></i>
             </div>
-            <h3 style="margin-bottom:10px; color:#fff;">Mark everything as read?</h3>
-            <p style="color:#aaa; margin-bottom:25px;">This will update the status of all pending feedback messages to
-                "read".</p>
-
-            <div style="display:flex; justify-content:center; gap:15px;">
+            <h3 style="margin-bottom:10px; color:#fff;">Mark all as read?</h3>
+            <div style="display:flex; justify-content:center; gap:15px; margin-top:20px;">
                 <button class="btn btn-secondary"
                     onclick="document.getElementById('markReadModal').style.display='none'">Cancel</button>
-                <button class="btn btn-primary"
-                    style="background: linear-gradient(135deg, #2ecc71, #135830); border:none;"
-                    onclick="document.getElementById('markAllReadFormBulk').submit()">Yes, Mark All</button>
+                <form method="POST">
+                    <input type="hidden" name="csrf_token" value="<?php echo generate_token(); ?>">
+                    <input type="hidden" name="action" value="mark_all_read">
+                    <input type="hidden" name="redirect_tab" value="feedbacks">
+                    <button type="submit" class="btn btn-primary" style="background: #2ecc71; border:none;">Confirm</button>
+                </form>
             </div>
         </div>
     </div>
@@ -1020,23 +999,17 @@ if (isset($sql_count)) {
     <!-- Hidden Delete Form -->
     <form id="deleteForm" method="POST" style="display:none">
         <input type="hidden" name="csrf_token" value="<?php echo generate_token(); ?>">
-        <input type="hidden" name="action" value="delete_item">
+        <input type="hidden" name="action" value="delete_item" id="form_action">
         <input type="hidden" name="redirect_tab" value="<?php echo $active_tab; ?>">
         <input type="hidden" name="id" id="del_id">
         <input type="hidden" name="type" id="del_type">
     </form>
 
     <script>
-        // Toast Logic
         <?php if (isset($_SESSION['toast'])): ?>
             const toast = document.getElementById('toast');
             document.getElementById('toast-msg').innerText = "<?php echo $_SESSION['toast']['msg']; ?>";
             toast.classList.add('show');
-            <?php if ($_SESSION['toast']['type'] === 'error'): ?>
-                toast.style.borderLeftColor = 'red';
-                toast.querySelector('i').style.color = 'red';
-                toast.querySelector('i').className = 'fas fa-exclamation-circle';
-            <?php endif; ?>
             setTimeout(() => toast.classList.remove('show'), 3000);
             <?php unset($_SESSION['toast']); ?>
         <?php endif; ?>
@@ -1065,51 +1038,31 @@ if (isset($sql_count)) {
             }
         }
 
-        // New Modal Delete Logic
         function openDeleteModal(id, type) {
             document.getElementById('del_id').value = id;
             document.getElementById('del_type').value = type;
+            document.getElementById('form_action').value = 'delete_item';
             document.getElementById('deleteModal').style.display = 'flex';
         }
 
-
-        // Close Modals on Outside Click
-        window.onclick = function (event) {
-            if (event.target.id === 'editModal') document.getElementById('editModal').style.display = 'none';
-            if (event.target.id === 'viewModal') document.getElementById('viewModal').style.display = 'none';
-            if (event.target.id === 'deleteModal') document.getElementById('deleteModal').style.display = 'none';
-            if (event.target.id === 'markReadModal') document.getElementById('markReadModal').style.display = 'none'; // Added this line
-        }
-        // Add this to your existing script block
         function openBulkDeleteModal() {
-            // We reuse your existing delete logic but change the hidden fields
-            document.getElementById('del_id').value = 'all'; // Special ID for bulk
-            document.getElementById('del_type').value = 'feedback';
-
-            // Update the modal text temporarily for bulk action
-            const modalTitle = document.querySelector('#deleteModal h3');
-            const modalPara = document.querySelector('#deleteModal p');
-
-            modalTitle.innerText = "Delete ALL Feedback?";
-            modalPara.innerText = "This will permanently erase every feedback entry in the database.";
-
+            document.getElementById('form_action').value = 'delete_all_feedback';
             document.getElementById('deleteModal').style.display = 'flex';
-        }
-
-        // Update your confirmDeleteAction to handle the bulk 'action' name
-        function confirmDeleteAction() {
-            const id = document.getElementById('del_id').value;
-            const form = document.getElementById('deleteForm');
-
-            if (id === 'all') {
-                form.querySelector('input[name="action"]').value = 'delete_all_feedback';
-            }
-
-            form.submit();
         }
 
         function openMarkReadModal() {
             document.getElementById('markReadModal').style.display = 'flex';
+        }
+
+        function confirmDeleteAction() {
+            document.getElementById('deleteForm').submit();
+        }
+
+        window.onclick = function (event) {
+            if (event.target.id === 'editModal') document.getElementById('editModal').style.display = 'none';
+            if (event.target.id === 'viewModal') document.getElementById('viewModal').style.display = 'none';
+            if (event.target.id === 'deleteModal') document.getElementById('deleteModal').style.display = 'none';
+            if (event.target.id === 'markReadModal') document.getElementById('markReadModal').style.display = 'none';
         }
     </script>
 </body>
